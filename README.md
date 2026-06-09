@@ -7,8 +7,11 @@ on an SMB share. Built with Next.js, packaged as a single Docker container.
 
 - **Web-based** vertical swipe feed, optimized for mobile, usable on desktop.
 - **Username/password login** with a "Remember me" option (30-day session).
-- **Multiple feeds** — each top-level folder on your SMB share is a feed.
+- **Multiple feeds** — every top-level folder under the media root is a feed.
+- **Multiple SMB shares** — mount as many shares as you like; each becomes a feed.
 - **Optional per-feed passwords** — lock a feed with an env var; unlock per session.
+- **Admin user management** — admins can add and remove accounts from the app.
+- **Installable PWA** — add to home screen on iOS/Android for a full-screen app.
 - **Supported formats** — `.mp4`, `.webm`, `.mov`, `.m4v` (video) and
   `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.avif` (images).
 - **Range-request streaming** for fast seeking and progressive video load.
@@ -46,6 +49,33 @@ persistent volume.
 
 The first boot creates the admin user from `ADMIN_USER` / `ADMIN_PASSWORD`.
 
+## Adding more users
+
+Sign in as the admin, go to **Settings → Manage users**, and add accounts.
+You can mark a new account as an administrator (able to manage users too).
+The seeded admin from `ADMIN_USER` is created only on first boot.
+
+## Feeds and multiple SMB shares
+
+Every top-level folder under `MEDIA_ROOT` (`/media`) is a feed. Media inside a
+feed is discovered recursively.
+
+To use **multiple SMB shares**, mount each share into its own subfolder of
+`/media`. The provided `docker-compose.yml` mounts two (`media_main` →
+`/media/main`, `media_family` → `/media/family`); copy a block to add more.
+Each mounted share shows up as one feed.
+
+Want a share's *subfolders* to each be their own feed instead of one big feed?
+Mount a subpath of the share directly — e.g. set `SMB_SHARE=media/vacation` so
+`/media/vacation` becomes the "vacation" feed — and add one mount per folder.
+
+## Installing as an app (PWA)
+
+Open the site in a mobile browser and use **Add to Home Screen** (Share menu on
+iOS Safari, the install prompt/menu on Android Chrome). It launches full-screen
+with no browser chrome. Requires serving over HTTPS (or `localhost`) for the
+install option to appear.
+
 ## Locking a feed
 
 Set an env var named `FEED_PASSWORD_<FEED>`, where `<FEED>` is the folder name
@@ -71,6 +101,32 @@ volumes:
 
 `uid=1001/gid=1001` matches the non-root `nextjs` user the container runs as.
 Adjust `vers=3.0` if your NAS needs a different SMB protocol version.
+
+The Docker **host** needs CIFS support for this to work (the `cifs-utils`
+package and the kernel `cifs` module). On some hosts the `cifs` volume driver
+also requires the container to run privileged.
+
+### Simpler alternative: mount on the host
+
+If the `cifs` volume driver gives you trouble, mount the share on the host
+yourself and bind-mount the folder into the container. Replace the `media_*`
+volumes with bind mounts:
+
+```yaml
+    volumes:
+      - videoloop-data:/data
+      - /mnt/smb/main:/media/main:ro
+      - /mnt/smb/family:/media/family:ro
+```
+
+…where `/mnt/smb/main` is mounted on the host (e.g. via `/etc/fstab` or your
+NAS UI). This is often the easiest route on home setups and on container
+managers like Dockge/Portainer/Dockhand, where adding bind-mount paths is
+simpler than configuring a CIFS volume driver.
+
+> Tip: when first setting up, run `docker compose up` (without `-d`) from a
+> terminal so you can see SMB mount errors directly. Once it works, switch to
+> `-d` or import the compose into your container manager.
 
 ## Development
 

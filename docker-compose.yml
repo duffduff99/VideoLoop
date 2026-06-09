@@ -19,14 +19,37 @@ services:
     volumes:
       # Persistent SQLite database.
       - videoloop-data:/data
-      # SMB share mounted read-only into the container.
-      - media:/media:ro
+      # Each SMB share is mounted into its own subfolder of /media. Every
+      # top-level folder under /media becomes a selectable "feed", so you can
+      # mount as many shares as you like — just add a volume + a named volume
+      # definition below for each one.
+      - media_main:/media/main:ro
+      - media_family:/media/family:ro
+      # - media_extra:/media/extra:ro
 
 volumes:
   videoloop-data:
-  media:
+
+  # ---- SMB share #1 ----
+  media_main:
     driver: local
     driver_opts:
       type: cifs
       o: "username=${SMB_USER},password=${SMB_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
       device: "//${SMB_HOST}/${SMB_SHARE}"
+
+  # ---- SMB share #2 (different share, can be a different host/credentials) ----
+  media_family:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB2_USER},password=${SMB2_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
+      device: "//${SMB2_HOST}/${SMB2_SHARE}"
+
+  # ---- SMB share #3 (optional) ----
+  # media_extra:
+  #   driver: local
+  #   driver_opts:
+  #     type: cifs
+  #     o: "username=${SMB3_USER},password=${SMB3_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
+  #     device: "//${SMB3_HOST}/${SMB3_SHARE}"

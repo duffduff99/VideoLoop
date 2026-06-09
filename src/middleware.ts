@@ -10,7 +10,11 @@ export async function middleware(req: NextRequest) {
   if (
     PUBLIC_PATHS.some((p) => pathname === p) ||
     pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon")
+    pathname.startsWith("/favicon") ||
+    // PWA + static assets must be reachable without a session.
+    pathname === "/sw.js" ||
+    pathname === "/manifest.webmanifest" ||
+    /\.(png|svg|ico|webmanifest)$/.test(pathname)
   ) {
     return NextResponse.next();
   }

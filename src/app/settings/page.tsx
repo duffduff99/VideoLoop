@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export default function SettingsPage() {
   const [autoplay, setAutoplay] = useState(true);
   const [username, setUsername] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -14,6 +15,7 @@ export default function SettingsPage() {
       .then((d) => {
         setAutoplay(Boolean(d.autoplay));
         setUsername(d.username || "");
+        setIsAdmin(Boolean(d.isAdmin));
         setLoaded(true);
       });
   }, []);
@@ -64,6 +66,20 @@ export default function SettingsPage() {
           {autoplay ? "On" : "Off"}
         </label>
       </div>
+
+      {isAdmin && (
+        <div className="settings-row">
+          <div>
+            <div style={{ fontWeight: 600 }}>Manage users</div>
+            <div style={{ color: "#aaa", fontSize: "0.9rem" }}>
+              Add or remove accounts
+            </div>
+          </div>
+          <a href="/admin/users" style={{ color: "#4da3ff" }}>
+            Open →
+          </a>
+        </div>
+      )}
     </div>
   );
 }

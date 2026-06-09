@@ -1,0 +1,32 @@
+services:
+  videoloop:
+    build: .
+    image: videoloop:latest
+    container_name: videoloop
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET}
+      MEDIA_ROOT: /media
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
+      DATABASE_URL: file:/data/videoloop.db
+      # Per-feed passwords are passed straight through, e.g.
+      # FEED_PASSWORD_PRIVATE_CLIPS: ${FEED_PASSWORD_PRIVATE_CLIPS}
+    env_file:
+      - .env
+    volumes:
+      # Persistent SQLite database.
+      - videoloop-data:/data
+      # SMB share mounted read-only into the container.
+      - media:/media:ro
+
+volumes:
+  videoloop-data:
+  media:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB_USER},password=${SMB_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
+      device: "//${SMB_HOST}/${SMB_SHARE}"

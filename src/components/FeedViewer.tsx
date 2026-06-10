@@ -14,35 +14,64 @@ export interface Item {
 }
 
 interface Props {
-  // Fetches a page of items. Returns items + the next cursor (null when done).
-  fetchPage: (cursor: number) => Promise<{ items: Item[]; nextCursor: number | null }>;
+  // Fetches a page of items for a given cycle (used to re-randomize on loop).
+  // Returns items + the next cursor (null when the cycle is exhausted).
+  fetchPage: (
+    cursor: number,
+    cycle: number
+  ) => Promise<{ items: Item[]; nextCursor: number | null }>;
   autoplaySetting: boolean;
-  title?: string;
 }
 
 export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
   const router = useRouter();
   const [items, setItems] = useState<Item[]>([]);
-  const [cursor, setCursor] = useState<number | null>(0);
-  const [loading, setLoading] = useState(false);
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
 
+  // Refs to avoid stale closures inside the IntersectionObserver callback.
+  const cursorRef = useRef<number | null>(0);
+  const cycleRef = useRef(0);
+  const itemsLenRef = useRef(0);
+  const loadingRef = useRef(false);
+
   const loadMore = useCallback(async () => {
-    if (loading || cursor === null) return;
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     try {
-      const { items: newItems, nextCursor } = await fetchPage(cursor);
-      setItems((prev) => [...prev, ...newItems]);
-      setCursor(nextCursor);
+      let c = cursorRef.current;
+      let cyc = cycleRef.current;
+      // Reached the end of a cycle: loop forever by starting a fresh cycle
+      // (re-randomized server-side) — but only once we actually have content.
+      if (c === null) {
+        if (itemsLenRef.current === 0) return;
+        cyc = cycleRef.current + 1;
+        cycleRef.current = cyc;
+        c = 0;
+      }
+      const { items: newItems, nextCursor } = await fetchPage(c, cyc);
+      cursorRef.current = nextCursor;
+      if (newItems.length > 0) {
+        setItems((prev) => {
+          const next = [...prev, ...newItems];
+          itemsLenRef.current = next.length;
+          return next;
+        });
+      } else {
+        // Empty result — stop to avoid an infinite no-op loop.
+        cursorRef.current = null;
+      }
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
-  }, [cursor, loading, fetchPage]);
+  }, [fetchPage]);
 
   // Initial load.
   useEffect(() => {
@@ -58,13 +87,13 @@ export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
       (entries) => {
         if (entries[0].isIntersecting) loadMore();
       },
-      { root: containerRef.current, rootMargin: "400px" }
+      { root: containerRef.current, rootMargin: "600px" }
     );
     io.observe(sentinel);
     return () => io.disconnect();
   }, [loadMore]);
 
-  // Track which slide is active; play its video, pause the rest.
+  // Track which slide is active.
   useEffect(() => {
     const root = containerRef.current;
     if (!root) return;
@@ -84,15 +113,22 @@ export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
     return () => io.disconnect();
   }, [items.length]);
 
-  // Play active video, pause others.
+  // Play the active video (pause the rest). If the browser blocks unmuted
+  // autoplay, fall back to muted playback and reflect that in the icon.
   useEffect(() => {
     videoRefs.current.forEach((video, idx) => {
       if (idx === activeIndex) {
         video.muted = muted;
-        video.play().catch(() => {});
+        video.play().catch(() => {
+          if (!video.muted) {
+            video.muted = true;
+            setMuted(true);
+            video.play().catch(() => {});
+          }
+        });
       } else {
         video.pause();
-        if (idx !== activeIndex) video.currentTime = 0;
+        video.currentTime = 0;
       }
     });
   }, [activeIndex, muted, items.length]);
@@ -100,13 +136,10 @@ export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
   function advance() {
     const root = containerRef.current;
     if (!root) return;
-    const next = activeIndex + 1;
     const target = root.querySelector(
-      `.slide[data-index="${next}"]`
+      `.slide[data-index="${activeIndex + 1}"]`
     ) as HTMLElement | null;
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth" });
-    }
+    if (target) target.scrollIntoView({ behavior: "smooth" });
   }
 
   async function toggleFavorite(item: Item, idx: number) {
@@ -115,12 +148,14 @@ export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ feed: item.feed, path: item.path }),
     });
+    if (res.status === 401) {
+      router.push("/login");
+      return;
+    }
     if (res.ok) {
       const data = await res.json();
       setItems((prev) =>
-        prev.map((it, i) =>
-          i === idx ? { ...it, favorite: data.favorite } : it
-        )
+        prev.map((it, i) => (i === idx ? { ...it, favorite: data.favorite } : it))
       );
     }
   }
@@ -135,8 +170,17 @@ export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
         ‹
       </button>
 
+      {/* Global mute toggle (applies to all videos). */}
+      <button
+        className="viewer-mute"
+        onClick={() => setMuted((m) => !m)}
+        aria-label={muted ? "Unmute" : "Mute"}
+      >
+        {muted ? "🔇" : "🔊"}
+      </button>
+
       {items.map((item, idx) => (
-        <div className="slide" key={`${item.feed}/${item.path}`} data-index={idx}>
+        <div className="slide" key={idx} data-index={idx}>
           {item.type === "video" ? (
             <video
               ref={(el) => {
@@ -154,12 +198,7 @@ export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
               }}
             />
           ) : (
-            <img
-              src={item.src}
-              alt={item.name}
-              loading="lazy"
-              decoding="async"
-            />
+            <img src={item.src} alt={item.name} loading="lazy" decoding="async" />
           )}
 
           <div className="slide-actions">
@@ -177,11 +216,7 @@ export default function FeedViewer({ fetchPage, autoplaySetting }: Props) {
       ))}
 
       <div className="loading-slide" ref={sentinelRef}>
-        {loading
-          ? "Loading…"
-          : cursor === null && items.length === 0
-          ? "Nothing here yet."
-          : ""}
+        {loading ? "Loading…" : items.length === 0 ? "Nothing here yet." : ""}
       </div>
     </div>
   );

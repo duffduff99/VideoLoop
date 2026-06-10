@@ -13,9 +13,11 @@ export default function FavoritesPage() {
       .catch(() => setAutoplay(true));
   }, []);
 
-  // Favorites are returned in a single page.
+  // Favorites are returned in a single page (no shuffle needed).
   const fetchPage = useCallback(
-    async (cursor: number): Promise<{ items: Item[]; nextCursor: number | null }> => {
+    async (
+      cursor: number
+    ): Promise<{ items: Item[]; nextCursor: number | null }> => {
       if (cursor > 0) return { items: [], nextCursor: null };
       const res = await fetch("/api/favorites");
       if (!res.ok) return { items: [], nextCursor: null };

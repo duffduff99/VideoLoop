@@ -48,19 +48,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing feed or path" }, { status: 400 });
   }
 
-  const existing = await prisma.favorite.findUnique({
-    where: {
-      userId_feed_path: { userId: session.uid, feed, path: itemPath },
-    },
+  // Guard against a stale session whose user no longer exists (e.g. after the
+  // database volume was reset while an old cookie persisted). Writing a
+  // favorite for a missing user would otherwise fail a foreign-key constraint
+  // and surface as a 500.
+  const user = await prisma.user.findUnique({
+    where: { id: session.uid },
+    select: { id: true },
   });
-
-  if (existing) {
-    await prisma.favorite.delete({ where: { id: existing.id } });
-    return NextResponse.json({ favorite: false });
+  if (!user) {
+    return NextResponse.json(
+      { error: "Session expired, please sign in again" },
+      { status: 401 }
+    );
   }
 
-  await prisma.favorite.create({
-    data: { userId: session.uid, feed, path: itemPath },
-  });
-  return NextResponse.json({ favorite: true });
+  try {
+    const existing = await prisma.favorite.findUnique({
+      where: {
+        userId_feed_path: { userId: session.uid, feed, path: itemPath },
+      },
+    });
+
+    if (existing) {
+      await prisma.favorite.delete({ where: { id: existing.id } });
+      return NextResponse.json({ favorite: false });
+    }
+
+    await prisma.favorite.create({
+      data: { userId: session.uid, feed, path: itemPath },
+    });
+    return NextResponse.json({ favorite: true });
+  } catch (err) {
+    console.error("[favorites] toggle failed:", err);
+    return NextResponse.json(
+      { error: "Could not update favorite" },
+      { status: 500 }
+    );
+  }
 }

@@ -144,11 +144,13 @@ button {
   gap: 0.5rem;
   min-height: 110px;
   justify-content: center;
+  color: #fff;
 }
 
 .feed-tile .name {
   font-size: 1.05rem;
   font-weight: 600;
+  color: #fff;
 }
 
 .feed-tile .lock {
@@ -202,6 +204,20 @@ button {
   border: none;
   color: #fff;
   font-size: 1.3rem;
+  border-radius: 50%;
+  width: 42px;
+  height: 42px;
+}
+
+.viewer-mute {
+  position: fixed;
+  top: env(safe-area-inset-top, 12px);
+  right: 12px;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+  color: #fff;
+  font-size: 1.1rem;
   border-radius: 50%;
   width: 42px;
   height: 42px;

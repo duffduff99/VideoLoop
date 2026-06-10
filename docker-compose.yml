@@ -9,6 +9,8 @@ services:
     environment:
       SESSION_SECRET: ${SESSION_SECRET}
       MEDIA_ROOT: /media
+      # Optional: choose/point feeds at specific subfolders (see .env.example).
+      FEEDS: ${FEEDS:-}
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
       DATABASE_URL: file:/data/videoloop.db

@@ -27,7 +27,7 @@ export async function GET(
   }
 
   const relPath = params.path.map((p) => decodeURIComponent(p)).join("/");
-  const abs = resolveMediaPath(feed, relPath);
+  const abs = await resolveMediaPath(feed, relPath);
   if (!abs) {
     return new Response("Forbidden", { status: 403 });
   }

@@ -60,8 +60,41 @@ export function isFeedLocked(feed: string): boolean {
   return Boolean(feedPassword(feed));
 }
 
-// List top-level folders under MEDIA_ROOT as feeds.
-export async function listFeeds(): Promise<FeedInfo[]> {
+interface FeedDef {
+  name: string; // display name (also the URL/feed key)
+  rel: string; // folder path relative to MEDIA_ROOT
+}
+
+// Optional explicit feed configuration via the FEEDS env var. Format is a
+// comma- or newline-separated list of "Display Name:relative/path" entries,
+// where the path is relative to MEDIA_ROOT. This lets a feed point at a
+// specific subfolder (e.g. "Short Films:main/ShortFilms") instead of a whole
+// top-level folder. If a single bare value is given (no colon), the name and
+// path are the same. When FEEDS is unset, every top-level folder under
+// MEDIA_ROOT is auto-discovered as a feed.
+function configuredFeeds(): FeedDef[] | null {
+  const raw = process.env.FEEDS;
+  if (!raw || !raw.trim()) return null;
+  const defs = raw
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const idx = entry.indexOf(":");
+      if (idx === -1) return { name: entry, rel: entry };
+      return {
+        name: entry.slice(0, idx).trim(),
+        rel: entry.slice(idx + 1).trim(),
+      };
+    })
+    .filter((d) => d.name && d.rel);
+  return defs.length ? defs : null;
+}
+
+async function getFeedDefs(): Promise<FeedDef[]> {
+  const configured = configuredFeeds();
+  if (configured) return configured;
+  // Auto-discover: every top-level directory under MEDIA_ROOT is a feed.
   let entries;
   try {
     entries = await fs.readdir(MEDIA_ROOT, { withFileTypes: true });
@@ -70,22 +103,42 @@ export async function listFeeds(): Promise<FeedInfo[]> {
   }
   return entries
     .filter((e) => e.isDirectory() && !e.name.startsWith("."))
-    .map((e) => ({ name: e.name, locked: isFeedLocked(e.name) }))
+    .map((e) => ({ name: e.name, rel: e.name }));
+}
+
+// Resolve a feed name to its absolute base directory, validated to stay within
+// MEDIA_ROOT. Returns null for unknown feeds or paths that escape the root.
+export async function feedDir(feedName: string): Promise<string | null> {
+  const defs = await getFeedDefs();
+  const def = defs.find((d) => d.name === feedName);
+  if (!def) return null;
+  const root = path.resolve(MEDIA_ROOT);
+  const dir = path.resolve(root, def.rel);
+  const rel = path.relative(root, dir);
+  if (rel.startsWith("..") || path.isAbsolute(rel) || rel === "") {
+    return null;
+  }
+  return dir;
+}
+
+// List the configured (or auto-discovered) feeds.
+export async function listFeeds(): Promise<FeedInfo[]> {
+  const defs = await getFeedDefs();
+  return defs
+    .map((d) => ({ name: d.name, locked: isFeedLocked(d.name) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 // Resolve a feed + relative path to an absolute path, guarding against
-// directory traversal outside the feed folder.
-export function resolveMediaPath(feed: string, relPath: string): string | null {
-  const root = path.resolve(MEDIA_ROOT);
-  const feedRoot = path.resolve(root, feed);
-  // Feed name itself must not escape MEDIA_ROOT and must be a single segment.
-  const feedRel = path.relative(root, feedRoot);
-  if (feedRel.startsWith("..") || feedRel.includes(path.sep) || feedRel === "") {
-    return null;
-  }
-  const target = path.resolve(feedRoot, relPath);
-  const rel = path.relative(feedRoot, target);
+// directory traversal outside the feed's base folder.
+export async function resolveMediaPath(
+  feed: string,
+  relPath: string
+): Promise<string | null> {
+  const base = await feedDir(feed);
+  if (!base) return null;
+  const target = path.resolve(base, relPath);
+  const rel = path.relative(base, target);
   if (rel.startsWith("..") || path.isAbsolute(rel)) {
     return null;
   }
@@ -94,7 +147,7 @@ export function resolveMediaPath(feed: string, relPath: string): string | null {
 
 // Recursively collect media items within a feed.
 export async function listFeedItems(feed: string): Promise<MediaItem[]> {
-  const resolved = resolveMediaPath(feed, ".");
+  const resolved = await feedDir(feed);
   if (!resolved) return [];
   const feedRoot: string = resolved;
 

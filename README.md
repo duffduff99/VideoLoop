@@ -57,8 +57,26 @@ The seeded admin from `ADMIN_USER` is created only on first boot.
 
 ## Feeds and multiple SMB shares
 
-Every top-level folder under `MEDIA_ROOT` (`/media`) is a feed. Media inside a
-feed is discovered recursively.
+By default, every top-level folder under `MEDIA_ROOT` (`/media`) is a feed, and
+media inside a feed is discovered recursively.
+
+### Choosing specific folders as feeds (`FEEDS`)
+
+To pick exactly which folders become feeds — and to point a feed at a
+**subfolder** instead of a whole share — set the `FEEDS` env var. It's a
+comma-separated list of `Display Name:relative/path` entries, where the path is
+relative to `MEDIA_ROOT`:
+
+```sh
+# Expose only two subfolders of the "main" share, skipping everything else
+# (e.g. a Movies folder full of unsupported .mkv files):
+FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny
+```
+
+Each entry's display name is what shows in the app (and is used for per-feed
+passwords). When `FEEDS` is unset, auto-discovery is used. This also hides
+noise like the host's `cdrom`/`floppy`/`usb` mount points that can appear under
+`/media`.
 
 To use **multiple SMB shares**, mount each share into its own subfolder of
 `/media`. The provided `docker-compose.yml` mounts two (`media_main` →

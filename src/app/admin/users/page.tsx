@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface User {
   id: string;
@@ -11,7 +11,6 @@ interface User {
 }
 
 export default function AdminUsersPage() {
-  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -77,7 +76,7 @@ export default function AdminUsersPage() {
       <div className="feed-list">
         <p className="empty">You need an admin account to manage users.</p>
         <p style={{ textAlign: "center" }}>
-          <a href="/" style={{ color: "#aaa" }}>← Home</a>
+          <Link href="/" style={{ color: "#aaa" }}>← Home</Link>
         </p>
       </div>
     );
@@ -88,8 +87,8 @@ export default function AdminUsersPage() {
       <header>
         <h1>Users</h1>
         <nav className="topnav">
-          <a href="/settings">Settings</a>
-          <a href="/">Home</a>
+          <Link href="/settings">Settings</Link>
+          <Link href="/">Home</Link>
         </nav>
       </header>
 

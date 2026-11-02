@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { feedPassword, isFeedLocked } from "@/lib/feeds";
 import { getSession, createToken, setSessionCookie } from "@/lib/session";
-import { cookies } from "next/headers";
-import { SESSION_COOKIE } from "@/lib/session";
 
 // Unlocking a feed re-issues the session token with the feed added to the
-// session's unlocked list. We preserve the original cookie max-age by reading
-// whether it was a "remember me" session (presence of a persistent cookie).
+// session's unlocked list, preserving the original "remember me" lifetime.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
@@ -28,14 +25,14 @@ export async function POST(req: NextRequest) {
   }
 
   const unlocked = Array.from(new Set([...(session.unlocked || []), feed]));
-  // Re-issue with the longer lifetime if the original cookie persisted.
-  const remember = Boolean(cookies().get(SESSION_COOKIE));
+  const remember = Boolean(session.remember);
   const token = await createToken(
     {
       uid: session.uid,
       username: session.username,
       isAdmin: session.isAdmin,
       unlocked,
+      remember,
     },
     remember
   );

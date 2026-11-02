@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { GearIcon, HeartIcon, LockIcon, PlayIcon, UnlockIcon } from "@/components/Icons";
 
 interface Feed {
   name: string;
@@ -9,87 +11,140 @@ interface Feed {
   unlocked: boolean;
 }
 
+// Stable, distinct gradient per feed name.
+function gradientFor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return `linear-gradient(145deg, hsl(${hue} 70% 42%), hsl(${(hue + 40) % 360} 75% 22%))`;
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
-
-  async function load() {
-    const res = await fetch("/api/feeds");
-    if (res.ok) {
-      const data = await res.json();
-      setFeeds(data.feeds);
-    }
-    setLoading(false);
-  }
+  const [unlocking, setUnlocking] = useState<Feed | null>(null);
+  const [password, setPassword] = useState("");
+  const [unlockError, setUnlockError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    load();
+    fetch("/api/feeds")
+      .then((r) => (r.ok ? r.json() : { feeds: [] }))
+      .then((d) => setFeeds(d.feeds))
+      .finally(() => setLoading(false));
   }, []);
 
-  async function openFeed(feed: Feed) {
+  useEffect(() => {
+    if (unlocking) setTimeout(() => inputRef.current?.focus(), 50);
+  }, [unlocking]);
+
+  function openFeed(feed: Feed) {
     if (feed.locked && !feed.unlocked) {
-      const password = window.prompt(`Password for "${feed.name}"`);
-      if (!password) return;
-      const res = await fetch("/api/feeds/unlock", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feed: feed.name, password }),
-      });
-      if (!res.ok) {
-        alert("Incorrect password");
-        return;
-      }
+      setPassword("");
+      setUnlockError("");
+      setUnlocking(feed);
+      return;
     }
     router.push(`/feed/${encodeURIComponent(feed.name)}`);
   }
 
-  async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+  async function submitUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    if (!unlocking) return;
+    setBusy(true);
+    setUnlockError("");
+    const res = await fetch("/api/feeds/unlock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ feed: unlocking.name, password }),
+    }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) {
+      setUnlockError("Incorrect password");
+      return;
+    }
+    const name = unlocking.name;
+    setUnlocking(null);
+    router.push(`/feed/${encodeURIComponent(name)}`);
   }
 
   return (
-    <div className="feed-list">
-      <header>
-        <h1>VideoLoop</h1>
-        <nav className="topnav">
-          <a href="/favorites">Favorites</a>
-          <a href="/settings">Settings</a>
-          <button
-            onClick={logout}
-            style={{ background: "none", border: "none", color: "#aaa" }}
-          >
-            Logout
-          </button>
-        </nav>
+    <main className="home">
+      <header className="home-header">
+        <div className="brand">
+          <span className="brand-mark"><PlayIcon size={16} /></span>
+          VideoLoop
+        </div>
+        <Link href="/settings" className="icon-btn ghost" aria-label="Settings">
+          <GearIcon />
+        </Link>
       </header>
 
+      <Link href="/favorites" className="fav-banner">
+        <HeartIcon filled size={22} />
+        <span>Favorites</span>
+        <span className="chev">›</span>
+      </Link>
+
+      <h2 className="section-title">Feeds</h2>
+
       {loading ? (
-        <p className="empty">Loading feeds…</p>
+        <div className="feed-grid">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="feed-card skeleton" />
+          ))}
+        </div>
       ) : feeds.length === 0 ? (
         <p className="empty">
-          No feeds found. Add top-level folders to your media share.
+          No feeds found. Check your SMB mount or the <code>FEEDS</code> setting.
         </p>
       ) : (
         <div className="feed-grid">
           {feeds.map((feed) => (
             <button
               key={feed.name}
-              className="feed-tile"
+              className="feed-card"
+              style={{ background: gradientFor(feed.name) }}
               onClick={() => openFeed(feed)}
             >
-              <span className="name">{feed.name}</span>
+              <span className="feed-card-play"><PlayIcon size={20} /></span>
+              <span className="feed-card-name">{feed.name}</span>
               {feed.locked && (
-                <span className="lock">
-                  {feed.unlocked ? "🔓 unlocked" : "🔒 locked"}
+                <span className="feed-card-lock">
+                  {feed.unlocked ? <UnlockIcon /> : <LockIcon />}
                 </span>
               )}
             </button>
           ))}
         </div>
       )}
-    </div>
+
+      {unlocking && (
+        <div className="sheet-backdrop" onClick={() => setUnlocking(null)}>
+          <form className="sheet" onClick={(e) => e.stopPropagation()} onSubmit={submitUnlock}>
+            <div className="sheet-handle" />
+            <h3>
+              <LockIcon size={18} /> {unlocking.name}
+            </h3>
+            <p className="sheet-sub">This feed is password protected.</p>
+            {unlockError && <div className="error">{unlockError}</div>}
+            <input
+              ref={inputRef}
+              type="password"
+              className="text-input"
+              placeholder="Feed password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="off"
+            />
+            <button className="btn" type="submit" disabled={busy || !password}>
+              {busy ? "Unlocking…" : "Unlock"}
+            </button>
+          </form>
+        </div>
+      )}
+    </main>
   );
 }

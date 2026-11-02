@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
 const SESSION_COOKIE = "vl_session";
@@ -19,6 +19,8 @@ export interface SessionPayload {
   isAdmin: boolean;
   // Feeds the user has unlocked this session (folder names).
   unlocked?: string[];
+  // Whether this login used "Remember me" (keeps re-issued tokens consistent).
+  remember?: boolean;
 }
 
 export async function createToken(
@@ -47,10 +49,20 @@ export async function verifyToken(
   }
 }
 
+// Browsers drop "Secure" cookies sent over plain http (except on localhost),
+// so only mark the cookie Secure when the request actually arrived over HTTPS
+// (directly or via a reverse proxy). COOKIE_SECURE=true/false overrides this.
+function cookieSecure(): boolean {
+  const override = process.env.COOKIE_SECURE;
+  if (override) return /^(1|true|yes)$/i.test(override);
+  const proto = headers().get("x-forwarded-proto");
+  return proto?.split(",")[0].trim() === "https";
+}
+
 export async function setSessionCookie(token: string, remember: boolean) {
   cookies().set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(),
     sameSite: "lax",
     path: "/",
     ...(remember ? { maxAge: REMEMBER_MAX_AGE } : {}),

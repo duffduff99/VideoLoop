@@ -1,115 +1,102 @@
 # VideoLoop
 
-A self-hosted, vertical "TikTok-style" media feed for photos and videos stored
-on an SMB share. Built with Next.js, packaged as a single Docker container.
+A self-hosted, TikTok-style vertical feed for the photos and videos on your
+SMB/NAS shares. Swipe through endless, shuffled feeds from any phone or
+desktop browser, and install it to your home screen like an app.
 
-## Features
+- **Swipe feed**: full-screen and snap-to-item. Shuffled, loops forever, loads lazily.
+- **Feeds** come from folders on one or more SMB shares. You can pick
+  exactly which folders appear with `FEEDS`.
+- **Accounts**: username/password with "Remember me". Admins add and remove users in the app.
+- **Favorites** (no comments). Per-user **auto-play next** setting. Optional **per-feed passwords**.
+- **Installable PWA**, with mobile-first touch controls and desktop keyboard controls.
 
-- **Web-based** vertical swipe feed, optimized for mobile, usable on desktop.
-- **Username/password login** with a "Remember me" option (30-day session).
-- **Multiple feeds** — every top-level folder under the media root is a feed.
-- **Multiple SMB shares** — mount as many shares as you like; each becomes a feed.
-- **Optional per-feed passwords** — lock a feed with an env var; unlock per session.
-- **Admin user management** — admins can add and remove accounts from the app.
-- **Installable PWA** — add to home screen on iOS/Android for a full-screen app.
-- **Supported formats** — `.mp4`, `.webm`, `.mov`, `.m4v` (video) and
-  `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.avif` (images).
-- **Range-request streaming** for fast seeking and progressive video load.
-- **Lazy loading** — items page in as you scroll.
-- **Favorites** (no comments) with a dedicated Favorites feed.
-- **Per-user auto-play** setting — advance to the next clip when a video ends.
+---
 
-## How it works
+## Contents
 
-The SMB share is mounted into the container at `MEDIA_ROOT` (default `/media`)
-by Docker. The app reads files directly from that path — it does not speak SMB
-itself. Each immediate subfolder of `MEDIA_ROOT` becomes a feed; media is
-discovered recursively within each feed.
+1. [Requirements](#1-requirements)
+2. [Get the code](#2-get-the-code)
+3. [Configure `.env`](#3-configure-env)
+4. [Connect your SMB share](#4-connect-your-smb-share)
+5. [Choose your feeds](#5-choose-your-feeds)
+6. [First start](#6-first-start)
+7. [Sign in and add users](#7-sign-in-and-add-users)
+8. [Use it from your phone](#8-use-it-from-your-phone)
+9. [Running with Dockhand / Dockge / Portainer](#9-running-with-dockhand--dockge--portainer)
+10. [Updating, backups, resetting](#10-updating-backups-resetting)
+11. [Troubleshooting](#11-troubleshooting)
+12. [Reference](#12-reference)
 
-User accounts, favorites, and settings are stored in a SQLite database on a
-persistent volume.
+---
 
-## Quick start
+## 1. Requirements
 
-1. Copy `.env.example` to `.env` and fill in the values:
+| | |
+|---|---|
+| **Docker** | Docker Engine 20+ with the Compose plugin (`docker compose version` should work). |
+| **An SMB share** | Its host/IP, share name, and a username/password with read access. |
+| **Media in browser-friendly formats** | Video: `.mp4` (H.264/AAC is the safest), `.webm`, `.mov`, `.m4v`. Images: `.jpg`, `.png`, `.webp`, `.gif`, `.avif`. See [formats](#supported-formats). |
 
-   ```sh
-   cp .env.example .env
-   # set SESSION_SECRET (openssl rand -hex 32), ADMIN_USER/ADMIN_PASSWORD,
-   # and the SMB_* connection details.
-   ```
+**Which machine should run it?** Ideally a machine that's always on: a home
+server, a NAS that runs Docker, or a mini PC. A laptop works fine for trying it
+out. If that laptop is **macOS or Windows (Docker Desktop)**, use the
+[host-mount option](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand)
+for SMB, because Docker Desktop usually can't use the built-in CIFS volume driver.
 
-2. Start it:
+---
 
-   ```sh
-   docker compose up -d --build
-   ```
-
-3. Open `http://localhost:3000` and sign in with your admin credentials.
-
-The first boot creates the admin user from `ADMIN_USER` / `ADMIN_PASSWORD`.
-
-## Adding more users
-
-Sign in as the admin, go to **Settings → Manage users**, and add accounts.
-You can mark a new account as an administrator (able to manage users too).
-The seeded admin from `ADMIN_USER` is created only on first boot.
-
-## Feeds and multiple SMB shares
-
-By default, every top-level folder under `MEDIA_ROOT` (`/media`) is a feed, and
-media inside a feed is discovered recursively.
-
-### Choosing specific folders as feeds (`FEEDS`)
-
-To pick exactly which folders become feeds — and to point a feed at a
-**subfolder** instead of a whole share — set the `FEEDS` env var. It's a
-comma-separated list of `Display Name:relative/path` entries, where the path is
-relative to `MEDIA_ROOT`:
+## 2. Get the code
 
 ```sh
-# Expose only two subfolders of the "main" share, skipping everything else
-# (e.g. a Movies folder full of unsupported .mkv files):
-FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny
+git clone https://github.com/duffduff99/VideoLoop.git
+cd VideoLoop
 ```
 
-Each entry's display name is what shows in the app (and is used for per-feed
-passwords). When `FEEDS` is unset, auto-discovery is used. This also hides
-noise like the host's `cdrom`/`floppy`/`usb` mount points that can appear under
-`/media`.
+> Until the work is merged, it lives on the `claude/keen-faraday-ad1c3e` branch:
+> `git checkout claude/keen-faraday-ad1c3e`
 
-To use **multiple SMB shares**, mount each share into its own subfolder of
-`/media`. The provided `docker-compose.yml` mounts two (`media_main` →
-`/media/main`, `media_family` → `/media/family`); copy a block to add more.
-Each mounted share shows up as one feed.
+---
 
-Want a share's *subfolders* to each be their own feed instead of one big feed?
-Mount a subpath of the share directly — e.g. set `SMB_SHARE=media/vacation` so
-`/media/vacation` becomes the "vacation" feed — and add one mount per folder.
+## 3. Configure `.env`
 
-## Installing as an app (PWA)
+```sh
+cp .env.example .env
+```
 
-Open the site in a mobile browser and use **Add to Home Screen** (Share menu on
-iOS Safari, the install prompt/menu on Android Chrome). It launches full-screen
-with no browser chrome. Requires serving over HTTPS (or `localhost`) for the
-install option to appear.
+Open `.env` and set at least these:
 
-## Locking a feed
+| Variable | What to put |
+|---|---|
+| `SESSION_SECRET` | A long random string. Generate one with `openssl rand -hex 32`. If you change it, everyone is signed out. |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | The first admin account. It's created **only on the very first start** (when the database is empty). |
+| `SMB_HOST`, `SMB_SHARE`, `SMB_USER`, `SMB_PASSWORD` | Your share (only for [Option A](#option-a-docker-cifs-volume-linux-hosts)). |
 
-Set an env var named `FEED_PASSWORD_<FEED>`, where `<FEED>` is the folder name
-uppercased with non-alphanumeric characters replaced by `_`.
+Tips for `.env` files:
+- No quotes and no trailing spaces: `ADMIN_PASSWORD=changeme`, not `ADMIN_PASSWORD="changeme" `.
+- Values can contain spaces: `FEEDS=Short Films:main/ShortFilms` is fine.
+- If a password contains `$`, write it as `$$` (Compose treats `$` as a variable).
 
-A folder named `private-clips` → `FEED_PASSWORD_PRIVATE_CLIPS=secret`.
+---
 
-Pass it through in `docker-compose.yml` under the service's `environment:`.
+## 4. Connect your SMB share
 
-## SMB mount
+Inside the container, media is read from **`/media`**. Each share is mounted
+into a subfolder of it (for example `/media/main`). You have two ways to do
+this. Pick one.
 
-`docker-compose.yml` mounts the share using the built-in `cifs` volume driver:
+### Option A: Docker CIFS volume (Linux hosts)
+
+This is already set up in `docker-compose.yml`. Docker mounts the share itself
+using your `SMB_*` values:
 
 ```yaml
+    volumes:
+      - media_main:/media/main:ro
+      - media_family:/media/family:ro
+
 volumes:
-  media:
+  media_main:
     driver: local
     driver_opts:
       type: cifs
@@ -117,41 +104,290 @@ volumes:
       device: "//${SMB_HOST}/${SMB_SHARE}"
 ```
 
-`uid=1001/gid=1001` matches the non-root `nextjs` user the container runs as.
-Adjust `vers=3.0` if your NAS needs a different SMB protocol version.
+- The host needs CIFS support: `sudo apt install cifs-utils` (Debian/Ubuntu)
+  or `sudo dnf install cifs-utils` (Fedora).
+- **Only one share?** Delete the `media_family` lines (both the entry under the
+  service's `volumes:` and the block under the top-level `volumes:`). Otherwise
+  Compose will try to mount a second share using the `SMB2_*` placeholders.
+- **More shares?** Copy a block, give it a new name, and add matching
+  `SMB3_*` values.
+- `vers=3.0` works for most NAS devices. Older ones may need `vers=2.1` or `vers=1.0`.
+- `uid=1001,gid=1001` matches the user the app runs as. Leave it as is.
+- To mount only part of a share, put the path in `SMB_SHARE`, for example
+  `SMB_SHARE=media/ShortFilms`.
 
-The Docker **host** needs CIFS support for this to work (the `cifs-utils`
-package and the kernel `cifs` module). On some hosts the `cifs` volume driver
-also requires the container to run privileged.
+### Option B: Mount on the host (recommended for Docker Desktop, NAS, and Dockhand)
 
-### Simpler alternative: mount on the host
+Mount the share on the host machine yourself, then hand the folder to the
+container. This is usually the easiest option, and it's the only one that
+reliably works with Docker Desktop.
 
-If the `cifs` volume driver gives you trouble, mount the share on the host
-yourself and bind-mount the folder into the container. Replace the `media_*`
-volumes with bind mounts:
+**Linux host:** create a credentials file and an `/etc/fstab` entry:
+
+```sh
+sudo mkdir -p /mnt/smb/main
+sudo tee /root/.smb-main >/dev/null <<'EOF'
+username=smbuser
+password=smbpassword
+EOF
+sudo chmod 600 /root/.smb-main
+echo '//192.168.1.10/media /mnt/smb/main cifs credentials=/root/.smb-main,uid=1001,gid=1001,ro,vers=3.0,nofail 0 0' | sudo tee -a /etc/fstab
+sudo mount -a && ls /mnt/smb/main     # you should see your folders
+```
+
+**macOS:** in Finder, press ⌘K, connect to `smb://192.168.1.10/media`, and it
+appears under `/Volumes/media`. In Docker Desktop, open Settings → Resources →
+File sharing and make sure `/Volumes` is allowed.
+
+**Windows:** mapped network drives (like `Z:`) usually **aren't visible** to
+Docker Desktop. The most reliable setup is to run VideoLoop on a Linux machine
+or NAS. If you need it on Windows, mount the share inside your WSL distro
+(`sudo mkdir -p /mnt/smb/main && sudo mount -t drvfs '\\192.168.1.10\media' /mnt/smb/main`),
+then run `docker compose` from that WSL shell and use `/mnt/smb/main` as the path below.
+
+Then edit `docker-compose.yml`. Replace the `media_*` volume lines with bind
+mounts, and delete the `media_*` blocks under the top-level `volumes:`
+(keep `videoloop-data`):
 
 ```yaml
     volumes:
       - videoloop-data:/data
-      - /mnt/smb/main:/media/main:ro
-      - /mnt/smb/family:/media/family:ro
+      - /mnt/smb/main:/media/main:ro        # Linux / WSL
+      # - /Volumes/media:/media/main:ro     # macOS
 ```
 
-…where `/mnt/smb/main` is mounted on the host (e.g. via `/etc/fstab` or your
-NAS UI). This is often the easiest route on home setups and on container
-managers like Dockge/Portainer/Dockhand, where adding bind-mount paths is
-simpler than configuring a CIFS volume driver.
+You don't need the `SMB_*` values in `.env` with this option.
 
-> Tip: when first setting up, run `docker compose up` (without `-d`) from a
-> terminal so you can see SMB mount errors directly. Once it works, switch to
-> `-d` or import the compose into your container manager.
+---
 
-## Development
+## 5. Choose your feeds
+
+**Default:** every folder directly under `/media` becomes a feed, and
+everything inside it (including subfolders) plays in that feed. With the
+compose file above, that gives you one feed per share (`main`, `family`).
+
+**Pick exact folders:** set `FEEDS` in `.env`. Each entry is
+`Display Name:path`, separated by commas, and the path is relative to `/media`:
+
+```sh
+FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny,Family:family
+```
+
+Only those folders appear, under those names. Everything else (for example
+a `Movies` folder full of `.mkv` files) is ignored.
+
+**Password-protect a feed:** add `FEED_PASSWORD_<NAME>`. `<NAME>` is the feed's
+display name in uppercase, with anything that isn't a letter or number replaced
+by `_`:
+
+```sh
+FEED_PASSWORD_SHORT_FILMS=letmein     # locks the "Short Films" feed
+```
+
+Users enter the password once per session, from the lock icon on the home screen.
+
+---
+
+## 6. First start
+
+The first time, run in the **foreground** so you can watch for problems:
+
+```sh
+docker compose up --build
+```
+
+A healthy start ends like this:
+
+```
+[videoloop] Applying database schema...
+[videoloop] Seeding initial data...
+[seed] Created initial admin user "admin".
+[videoloop] Starting server...
+  ▲ Next.js 14.2.18
+ ✓ Starting...
+ ✓ Ready in ...ms
+```
+
+Check that the container can see your media:
+
+```sh
+docker compose exec videoloop sh -c "ls /media && find /media -type f | head -20"
+```
+
+Once it works, press `Ctrl+C` and run it in the background:
+
+```sh
+docker compose up -d
+docker compose logs -f videoloop      # follow logs; Ctrl+C stops following, not the app
+```
+
+---
+
+## 7. Sign in and add users
+
+1. Open **http://localhost:3000** on the machine running it, or
+   `http://<that machine's IP>:3000` from another device.
+2. Sign in with `ADMIN_USER` / `ADMIN_PASSWORD`.
+3. Go to **Settings (gear icon) → Manage users** to add accounts for the rest of
+   the household. Tick "Administrator" for anyone who should also manage users.
+
+Each person has their own favorites and their own auto-play setting.
+
+---
+
+## 8. Use it from your phone
+
+**On your home network:** find the server's IP address (`ip addr` on Linux,
+`ipconfig` on Windows, System Settings → Network on macOS) and open
+`http://192.168.x.x:3000` on your phone.
+
+**Install it as an app:** the install option only appears when the site is
+served over **HTTPS**. The browser rule is HTTPS or `localhost`, and a phone
+can't use `localhost`. Two easy ways to get HTTPS at home:
+
+- **Tailscale** (easiest, and also works away from home): install Tailscale on
+  the server and your phone, then on the server run
+  `tailscale serve --bg 3000`. Open the `https://<machine>.<tailnet>.ts.net`
+  address it prints.
+- **A reverse proxy** such as Caddy, Nginx Proxy Manager, or Traefik in front
+  of port 3000. Example `Caddyfile`:
+  ```
+  videoloop.example.com {
+      reverse_proxy localhost:3000
+  }
+  ```
+
+Then:
+- **iPhone (Safari):** Share button → **Add to Home Screen**.
+- **Android (Chrome):** ⋮ menu → **Install app** (or **Add to Home screen**).
+
+It opens full-screen with no browser bars.
+
+**Controls**
+
+| | Phone | Desktop |
+|---|---|---|
+| Next / previous | Swipe up / down | ↓ / ↑, J / K, Page Down / Page Up, mouse wheel |
+| Pause / play | Tap | Space |
+| Favorite | Double-tap or ♥ | F |
+| Mute | Speaker icon (top right) | M |
+| Back to feeds | ‹ (top left) | Esc |
+
+Sound starts **on**. Some phones block sound until you've tapped the page once.
+In that case the first clip starts muted, and the speaker icon shows it.
+
+---
+
+## 9. Running with Dockhand / Dockge / Portainer
+
+These tools run the same `docker-compose.yml`, so the steps above still apply.
+
+1. **Get it working once from a terminal first** ([step 6](#6-first-start)).
+   SMB mount errors are much easier to read there.
+2. In your manager, create a new stack/project from this folder, or paste in
+   `docker-compose.yml`.
+3. Add your `.env` values in the manager's environment section, or keep the
+   `.env` file next to the compose file. Many managers read it automatically.
+4. The compose file **builds** the image (`build: .`), so the manager needs
+   access to the source folder. If yours can only pull pre-built images, build
+   on the server with `docker compose build` and keep `image: videoloop:latest`.
+5. Prefer [Option B (host mount)](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand)
+   for the media. Adding a bind-mount path in a GUI is simpler than setting up
+   CIFS driver options.
+
+---
+
+## 10. Updating, backups, resetting
+
+**Update to the latest code**
+
+```sh
+git pull
+docker compose build --no-cache
+docker compose up -d
+```
+
+Accounts and favorites are kept. They live in the `videoloop-data` volume,
+not in the image.
+
+**Back up accounts and favorites**
+
+```sh
+docker compose cp videoloop:/data/videoloop.db ./videoloop-backup.db
+```
+
+**Forgot the admin password?** Add `ADMIN_RESET_PASSWORD=true` to `.env` and
+run `docker compose up -d`. The admin account is reset to `ADMIN_PASSWORD`, and
+other users and favorites are kept. **Remove the line afterwards.**
+
+**Start completely fresh** (deletes all users and favorites):
+
+```sh
+docker compose down -v
+docker compose up -d
+```
+
+After a fresh start, sign out and back in on each device, since the old login
+cookies point to users that no longer exist.
+
+---
+
+## 11. Troubleshooting
+
+Start with the logs. They almost always name the problem:
+
+```sh
+docker compose logs --tail=100 videoloop
+```
+
+| Symptom | Likely cause and fix |
+|---|---|
+| Container keeps **restarting** | Read the logs. If it fails right at start with `mount error` / `cifs` / `Host is down` / `Permission denied`, the SMB mount failed: check host/share/credentials, try another `vers=`, install `cifs-utils`, or switch to [Option B](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand). |
+| Compose error about `SMB2_HOST`, or a second share failing to mount | You only have one share. Remove the `media_family` entries ([Option A](#option-a-docker-cifs-volume-linux-hosts)). |
+| Logs mention **Prisma / OpenSSL / engines** | You're running an old image. Run `git pull` and `docker compose build --no-cache`. |
+| **"Invalid username or password"** with the `.env` credentials | The admin is only created when the database is empty. Check `docker compose logs videoloop \| grep seed`. If it says "Users already exist", use `ADMIN_RESET_PASSWORD=true` ([section 10](#10-updating-backups-resetting)). Usernames are case-sensitive. |
+| Sign-in works on the server but **the phone keeps returning to the login page** | Make sure you're on the latest code (older builds set an HTTPS-only cookie). If you're behind HTTPS, check that the proxy sends `X-Forwarded-Proto`, or set `COOKIE_SECURE=true`. |
+| Favorites fail / you're bounced to login | Your browser has a login cookie from before a database reset. Sign out and back in. |
+| Home screen shows odd feeds like `cdrom`, `floppy`, `usb` | The host's `/media` folder is showing through. Use `FEEDS` to list only the folders you want ([section 5](#5-choose-your-feeds)). |
+| A feed opens but shows **nothing** | No supported files in it. Run the `find /media ...` command from [step 6](#6-first-start) and check the extensions. iPhone `.heic` photos and `.mkv`/`.avi` videos are skipped. |
+| Video shows black or won't play | The codec isn't browser-friendly (for example HEVC/H.265 in some browsers). Re-encode to H.264 MP4: `ffmpeg -i in.mov -c:v libx264 -c:a aac -movflags +faststart out.mp4` |
+| No "Install app" / "Add to Home Screen" option | It needs HTTPS ([section 8](#8-use-it-from-your-phone)). |
+| Port 3000 already in use | Change `"3000:3000"` to e.g. `"8080:3000"` in `docker-compose.yml` and open port 8080 instead. |
+
+---
+
+## 12. Reference
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `SESSION_SECRET` | *(required)* | Signs login cookies. |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | First admin account (created on first start). |
+| `ADMIN_RESET_PASSWORD` | *(unset)* | `true` resets the admin password on start. Remove it after use. |
+| `FEEDS` | *(auto)* | `Name:path,Name:path` list of feeds, with paths relative to `/media`. |
+| `FEED_PASSWORD_<NAME>` | *(unset)* | Locks a feed (see [section 5](#5-choose-your-feeds)). |
+| `MEDIA_ROOT` | `/media` | Where media is read from inside the container. |
+| `DATABASE_URL` | `file:/data/videoloop.db` | SQLite database location. |
+| `COOKIE_SECURE` | *(auto)* | Force the cookie `Secure` flag on or off. Normally auto-detected. |
+| `SMB_*`, `SMB2_*`, ... | | Share details for the [CIFS volumes](#option-a-docker-cifs-volume-linux-hosts) in `docker-compose.yml`. |
+
+### Supported formats
+
+| Type | Extensions | Notes |
+|---|---|---|
+| Video | `.mp4`, `.m4v`, `.webm`, `.mov`, `.ogv` | H.264/AAC `.mp4` plays everywhere. `.mov` and HEVC depend on the browser. |
+| Image | `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`, `.avif` | `.heic` isn't supported by browsers. |
+
+Hidden files and folders (names starting with `.`) are ignored.
+
+### Development
 
 ```sh
 npm install
-cp .env.example .env   # set DATABASE_URL=file:./prisma/dev.db and MEDIA_ROOT=./sample-media
-npm run db:push
-npm run db:seed
-npm run dev
+cp .env.example .env    # set DATABASE_URL=file:./dev.db and MEDIA_ROOT=./sample-media
+npm run db:push && npm run db:seed
+npm run dev             # http://localhost:3000
 ```
+
+`node scripts/generate-icons.js` regenerates the app icons.

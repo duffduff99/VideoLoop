@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import FeedViewer, { Item } from "@/components/FeedViewer";
+import FeedViewer, { PageResult } from "@/components/FeedViewer";
 
 export default function FeedPage() {
   const params = useParams();
@@ -10,7 +10,7 @@ export default function FeedPage() {
     Array.isArray(params.feed) ? params.feed[0] : (params.feed as string)
   );
   const [autoplay, setAutoplay] = useState<boolean | null>(null);
-  // Base seed for this viewing; each loop cycle offsets it for a new order.
+  // Base seed for this visit; each loop cycle offsets it for a fresh order.
   const baseSeed = useRef(Math.floor(Math.random() * 1_000_000));
 
   useEffect(() => {
@@ -21,22 +21,21 @@ export default function FeedPage() {
   }, []);
 
   const fetchPage = useCallback(
-    async (
-      cursor: number,
-      cycle: number
-    ): Promise<{ items: Item[]; nextCursor: number | null }> => {
+    async (cursor: number, cycle: number): Promise<PageResult> => {
       const seed = baseSeed.current + cycle;
       const res = await fetch(
         `/api/feeds/${encodeURIComponent(feed)}/items?cursor=${cursor}&seed=${seed}`
-      );
-      if (!res.ok) return { items: [], nextCursor: null };
+      ).catch(() => null);
+      if (!res) return { items: [], nextCursor: null };
+      if (!res.ok) return { items: [], nextCursor: null, status: res.status };
       const data = await res.json();
       return { items: data.items, nextCursor: data.nextCursor };
     },
     [feed]
   );
 
-  if (autoplay === null) return null;
+  if (autoplay === null) return <div className="viewer-empty"><div className="spinner" /></div>;
 
-  return <FeedViewer fetchPage={fetchPage} autoplaySetting={autoplay} />;
+  // Keyed by feed so switching playlists fully resets the viewer's state.
+  return <FeedViewer key={feed} title={feed} fetchPage={fetchPage} autoplaySetting={autoplay} />;
 }

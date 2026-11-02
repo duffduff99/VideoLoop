@@ -14,8 +14,8 @@ services:
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
       DATABASE_URL: file:/data/videoloop.db
-      # Per-feed passwords are passed straight through, e.g.
-      # FEED_PASSWORD_PRIVATE_CLIPS: ${FEED_PASSWORD_PRIVATE_CLIPS}
+      # Everything else in .env (FEED_PASSWORD_*, ADMIN_RESET_PASSWORD,
+      # COOKIE_SECURE, ...) is passed into the container via env_file below.
     env_file:
       - .env
     volumes:

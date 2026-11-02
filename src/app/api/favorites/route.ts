@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { mimeFor, mediaType } from "@/lib/feeds";
+import { isFeedLocked, mimeFor, mediaType, resolveMediaPath } from "@/lib/feeds";
+import fs from "fs/promises";
 import path from "path";
 
 export const dynamic = "force-dynamic";
@@ -16,9 +17,28 @@ export async function GET() {
     where: { userId: session.uid },
     orderBy: { createdAt: "desc" },
   });
+
+  // Skip favorites whose file was moved/deleted on the share, or whose feed is
+  // locked and not unlocked this session — both would render as broken slides.
+  const unlocked = new Set(session.unlocked || []);
+  const playable = (
+    await Promise.all(
+      favs.map(async (f) => {
+        if (isFeedLocked(f.feed) && !unlocked.has(f.feed)) return null;
+        const abs = await resolveMediaPath(f.feed, f.path);
+        if (!abs) return null;
+        const exists = await fs
+          .stat(abs)
+          .then((s) => s.isFile())
+          .catch(() => false);
+        return exists ? f : null;
+      })
+    )
+  ).filter((f): f is (typeof favs)[number] => f !== null);
+
   return NextResponse.json({
-    items: favs.map((f) => {
-      const ext = path.extname(f.path);
+    items: playable.map((f) => {
+      const ext = path.extname(f.path).toLowerCase();
       return {
         feed: f.feed,
         path: f.path,

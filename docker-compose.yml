@@ -23,10 +23,10 @@ services:
       ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-}
       # Optional: force the cookie Secure flag (auto-detected by default).
       COOKIE_SECURE: ${COOKIE_SECURE:-}
-      # Per-feed passwords: add one line per locked feed, e.g.
-      # FEED_PASSWORD_SHORT_FILMS: ${FEED_PASSWORD_SHORT_FILMS}
-    # A local .env file is also loaded if present (handy for FEED_PASSWORD_*
-    # entries), but it is optional so deployments without one still work.
+      # Optional: lock feeds with passwords, "Feed Name:password,Other:pw".
+      FEED_PASSWORDS: ${FEED_PASSWORDS:-}
+    # A local .env file is also loaded if present, but it is optional so
+    # deployments without one (e.g. from Git in Dockhand) still work.
     env_file:
       - path: .env
         required: false

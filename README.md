@@ -175,13 +175,17 @@ FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny,Family:family
 Only those folders appear, under those names. Everything else (for example
 a `Movies` folder full of `.mkv` files) is ignored.
 
-**Password-protect a feed:** add `FEED_PASSWORD_<NAME>`. `<NAME>` is the feed's
-display name in uppercase, with anything that isn't a letter or number replaced
-by `_`:
+**Password-protect a feed:** set `FEED_PASSWORDS` to comma-separated
+`Feed Name:password` entries, using the feed's display name:
 
 ```sh
-FEED_PASSWORD_SHORT_FILMS=letmein     # locks the "Short Films" feed
+FEEDS=Images:main/Images,Clips:main/Clips
+FEED_PASSWORDS=Clips:letmein          # locks the "Clips" feed
 ```
+
+Passwords can't contain commas. (A per-feed `FEED_PASSWORD_<NAME>` variable,
+e.g. `FEED_PASSWORD_CLIPS`, also works, but only from a `.env` file:
+container managers like Dockhand don't pass it through.)
 
 Users enter the password once per session, from the lock icon on the home screen.
 
@@ -301,17 +305,16 @@ the manager's environment-variables section instead.
    | `SMB_HOST` / `SMB_SHARE` / `SMB_USER` / `SMB_PASSWORD` | `192.168.1.10` / `media` / ... |
    | `HOST_PORT` *(optional)* | `8080` if 3000 is taken (default `3000`) |
    | `FEEDS` *(optional)* | `Short Films:main/ShortFilms` |
+   | `FEED_PASSWORDS` *(optional)* | `Short Films:letmein` |
 
 3. Deploy. The first deploy **builds** the image on the server, which takes a
    few minutes. Then check the stack's logs for the
    [healthy start lines](#6-first-start).
 
 Notes:
-- **Feed passwords:** a `FEED_PASSWORD_<NAME>` variable only reaches the app
-  if `docker-compose.yml` passes it through. For each locked feed, add a line
-  under `environment:` (there's a commented example), e.g.
-  `FEED_PASSWORD_SHORT_FILMS: ${FEED_PASSWORD_SHORT_FILMS}`, and set the value
-  in the stack's variables.
+- **Feed passwords:** use `FEED_PASSWORDS` (e.g. `Clips:letmein`), not
+  `FEED_PASSWORD_<NAME>`. Without a `.env` file, only variables listed in
+  `docker-compose.yml` reach the app, and `FEED_PASSWORDS` is one of them.
 - **SMB mount errors** are easiest to read from a terminal on the server
   (`docker compose up` in the stack folder). If the CIFS volume fights you,
   switch to the [host mount](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand).
@@ -392,7 +395,7 @@ docker compose logs --tail=100 videoloop
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | First admin account (created on first start). |
 | `ADMIN_RESET_PASSWORD` | *(unset)* | `true` resets the admin password on start. Remove it after use. |
 | `FEEDS` | *(auto)* | `Name:path,Name:path` list of feeds, with paths relative to `/media`. |
-| `FEED_PASSWORD_<NAME>` | *(unset)* | Locks a feed (see [section 5](#5-choose-your-feeds)). |
+| `FEED_PASSWORDS` | *(unset)* | `Name:password,Name:password` feed locks (see [section 5](#5-choose-your-feeds)). |
 | `MEDIA_ROOT` | `/media` | Where media is read from inside the container. |
 | `DATABASE_URL` | `file:/data/videoloop.db` | SQLite database location. |
 | `COOKIE_SECURE` | *(auto)* | Force the cookie `Secure` flag on or off. Normally auto-detected. |

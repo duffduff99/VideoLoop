@@ -52,8 +52,27 @@ function feedEnvKey(feed: string): string {
   return "FEED_PASSWORD_" + feed.toUpperCase().replace(/[^A-Z0-9]/g, "_");
 }
 
+// FEED_PASSWORDS="Clips:secret,Short Films:other" — one variable for all
+// locked feeds, so container managers only need to pass a single, fixed
+// variable through. Each entry splits on its first ":" (feed names can't
+// contain ":"; passwords can, but neither may contain ",").
+function feedPasswordsMap(): Map<string, string> {
+  const map = new Map<string, string>();
+  const raw = process.env.FEED_PASSWORDS;
+  if (!raw) return map;
+  for (const entry of raw.split(/[,\n]/)) {
+    const idx = entry.indexOf(":");
+    if (idx === -1) continue;
+    const name = entry.slice(0, idx).trim();
+    const pw = entry.slice(idx + 1).trim();
+    if (name && pw) map.set(name.toLowerCase(), pw);
+  }
+  return map;
+}
+
 export function feedPassword(feed: string): string | undefined {
-  return process.env[feedEnvKey(feed)];
+  // A per-feed FEED_PASSWORD_<NAME> variable wins; otherwise FEED_PASSWORDS.
+  return process.env[feedEnvKey(feed)] || feedPasswordsMap().get(feed.toLowerCase());
 }
 
 export function isFeedLocked(feed: string): boolean {

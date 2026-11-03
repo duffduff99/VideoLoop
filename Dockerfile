@@ -24,7 +24,10 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Alpine ships empty /media/cdrom, /media/floppy and /media/usb mount points;
+# remove them so they don't show up as feeds (media is mounted under /media).
 RUN apk add --no-cache openssl \
+  && rm -rf /media/cdrom /media/floppy /media/usb \
   && addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 

@@ -371,7 +371,7 @@ docker compose logs --tail=100 videoloop
 | **"Invalid username or password"** with the `.env` credentials | The admin is only created when the database is empty. Check `docker compose logs videoloop \| grep seed`. If it says "Users already exist", use `ADMIN_RESET_PASSWORD=true` ([section 10](#10-updating-backups-resetting)). Usernames are case-sensitive. |
 | Sign-in works on the server but **the phone keeps returning to the login page** | Make sure you're on the latest code (older builds set an HTTPS-only cookie). If you're behind HTTPS, check that the proxy sends `X-Forwarded-Proto`, or set `COOKIE_SECURE=true`. |
 | Favorites fail / you're bounced to login | Your browser has a login cookie from before a database reset. Sign out and back in. |
-| Home screen shows odd feeds like `cdrom`, `floppy`, `usb` | The host's `/media` folder is showing through. Use `FEEDS` to list only the folders you want ([section 5](#5-choose-your-feeds)). |
+| Home screen shows odd feeds like `cdrom`, `floppy`, `usb` | Those are empty folders built into the Alpine base image. Fixed in the current image, so rebuild/redeploy. `FEEDS` also hides them ([section 5](#5-choose-your-feeds)). |
 | A feed opens but shows **nothing** | No supported files in it. Run the `find /media ...` command from [step 6](#6-first-start) and check the extensions. iPhone `.heic` photos and `.mkv`/`.avi` videos are skipped. |
 | Video shows black or won't play | The codec isn't browser-friendly (for example HEVC/H.265 in some browsers). Re-encode to H.264 MP4: `ffmpeg -i in.mov -c:v libx264 -c:a aac -movflags +faststart out.mp4` |
 | No "Install app" / "Add to Home Screen" option | It needs HTTPS ([section 8](#8-use-it-from-your-phone)). |

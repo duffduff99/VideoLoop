@@ -5,7 +5,9 @@ services:
     container_name: videoloop
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Host port is configurable with HOST_PORT (default 3000); the app always
+      # listens on 3000 inside the container.
+      - "${HOST_PORT:-3000}:3000"
     # Settings come from environment variables: either a .env file next to
     # this compose file, or the environment-variables section of a container
     # manager such as Dockhand / Dockge / Portainer (no .env file needed).

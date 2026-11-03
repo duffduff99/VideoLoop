@@ -297,6 +297,7 @@ the manager's environment-variables section instead.
    | `SESSION_SECRET` | output of `openssl rand -hex 32` **(required)** |
    | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / something strong |
    | `SMB_HOST` / `SMB_SHARE` / `SMB_USER` / `SMB_PASSWORD` | `192.168.1.10` / `media` / ... |
+   | `HOST_PORT` *(optional)* | `8080` if 3000 is taken (default `3000`) |
    | `FEEDS` *(optional)* | `Short Films:main/ShortFilms` |
 
 3. Deploy. The first deploy **builds** the image on the server, which takes a
@@ -374,7 +375,7 @@ docker compose logs --tail=100 videoloop
 | A feed opens but shows **nothing** | No supported files in it. Run the `find /media ...` command from [step 6](#6-first-start) and check the extensions. iPhone `.heic` photos and `.mkv`/`.avi` videos are skipped. |
 | Video shows black or won't play | The codec isn't browser-friendly (for example HEVC/H.265 in some browsers). Re-encode to H.264 MP4: `ffmpeg -i in.mov -c:v libx264 -c:a aac -movflags +faststart out.mp4` |
 | No "Install app" / "Add to Home Screen" option | It needs HTTPS ([section 8](#8-use-it-from-your-phone)). |
-| Port 3000 already in use | Change `"3000:3000"` to e.g. `"8080:3000"` in `docker-compose.yml` and open port 8080 instead. |
+| Port 3000 already in use | Set `HOST_PORT` (e.g. `HOST_PORT=8080`) in `.env` or your manager's environment variables, redeploy, and open port 8080 instead. |
 
 ---
 
@@ -385,6 +386,7 @@ docker compose logs --tail=100 videoloop
 | Variable | Default | Purpose |
 |---|---|---|
 | `SESSION_SECRET` | *(required)* | Signs login cookies. |
+| `HOST_PORT` | `3000` | Port on the host to reach the app at. |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | First admin account (created on first start). |
 | `ADMIN_RESET_PASSWORD` | *(unset)* | `true` resets the admin password on start. Remove it after use. |
 | `FEEDS` | *(auto)* | `Name:path,Name:path` list of feeds, with paths relative to `/media`. |

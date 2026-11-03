@@ -1,5 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
+import type { SessionPayload } from "./session";
 
 export const MEDIA_ROOT = process.env.MEDIA_ROOT || "/media";
 
@@ -34,7 +35,7 @@ export interface MediaItem {
 
 export interface FeedInfo {
   name: string;
-  locked: boolean;
+  private: boolean;
 }
 
 export function mediaType(ext: string): MediaType | null {
@@ -47,36 +48,48 @@ export function mimeFor(ext: string): string {
   return MIME[ext.toLowerCase()] || "application/octet-stream";
 }
 
-// Convert a feed (folder) name into the env var suffix used for its password.
-function feedEnvKey(feed: string): string {
+// ---- Private feeds ----
+// Private feeds are hidden everywhere (feed list, items, media, favorites)
+// until the user re-enters their own account password in Settings.
+//
+// PRIVATE_FEEDS="Clips,Short Films" lists them by display name. For
+// compatibility, feeds named in the older FEED_PASSWORDS ("Name:pw,...") or
+// FEED_PASSWORD_<NAME> variables are treated as private too (their passwords
+// are no longer used), so upgrading never silently exposes a locked feed.
+function privateFeedSet(): Set<string> {
+  const set = new Set<string>();
+  for (const name of (process.env.PRIVATE_FEEDS || "").split(/[,\n]/)) {
+    if (name.trim()) set.add(name.trim().toLowerCase());
+  }
+  for (const entry of (process.env.FEED_PASSWORDS || "").split(/[,\n]/)) {
+    const idx = entry.indexOf(":");
+    const name = (idx === -1 ? entry : entry.slice(0, idx)).trim();
+    if (name) set.add(name.toLowerCase());
+  }
+  return set;
+}
+
+function legacyPasswordEnvKey(feed: string): string {
   return "FEED_PASSWORD_" + feed.toUpperCase().replace(/[^A-Z0-9]/g, "_");
 }
 
-// FEED_PASSWORDS="Clips:secret,Short Films:other" — one variable for all
-// locked feeds, so container managers only need to pass a single, fixed
-// variable through. Each entry splits on its first ":" (feed names can't
-// contain ":"; passwords can, but neither may contain ",").
-function feedPasswordsMap(): Map<string, string> {
-  const map = new Map<string, string>();
-  const raw = process.env.FEED_PASSWORDS;
-  if (!raw) return map;
-  for (const entry of raw.split(/[,\n]/)) {
-    const idx = entry.indexOf(":");
-    if (idx === -1) continue;
-    const name = entry.slice(0, idx).trim();
-    const pw = entry.slice(idx + 1).trim();
-    if (name && pw) map.set(name.toLowerCase(), pw);
-  }
-  return map;
+export function isFeedPrivate(feed: string): boolean {
+  return privateFeedSet().has(feed.toLowerCase()) || Boolean(process.env[legacyPasswordEnvKey(feed)]);
 }
 
-export function feedPassword(feed: string): string | undefined {
-  // A per-feed FEED_PASSWORD_<NAME> variable wins; otherwise FEED_PASSWORDS.
-  return process.env[feedEnvKey(feed)] || feedPasswordsMap().get(feed.toLowerCase());
+// How long private feeds stay visible after unlocking (default 12 hours).
+export function privateUnlockMs(): number {
+  const hours = parseFloat(process.env.PRIVATE_UNLOCK_HOURS || "12");
+  return (isFinite(hours) && hours > 0 ? hours : 12) * 60 * 60 * 1000;
 }
 
-export function isFeedLocked(feed: string): boolean {
-  return Boolean(feedPassword(feed));
+export function privateVisible(session: SessionPayload): boolean {
+  return (session.privateUntil ?? 0) > Date.now();
+}
+
+// Whether this session may see a feed (and its items, media and favorites).
+export function canViewFeed(session: SessionPayload, feed: string): boolean {
+  return !isFeedPrivate(feed) || privateVisible(session);
 }
 
 interface FeedDef {
@@ -144,7 +157,7 @@ export async function feedDir(feedName: string): Promise<string | null> {
 export async function listFeeds(): Promise<FeedInfo[]> {
   const defs = await getFeedDefs();
   return defs
-    .map((d) => ({ name: d.name, locked: isFeedLocked(d.name) }))
+    .map((d) => ({ name: d.name, private: isFeedPrivate(d.name) }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 

@@ -6,11 +6,21 @@ import { Readable } from "stream";
 import {
   resolveMediaPath,
   mimeFor,
-  isFeedLocked,
+  canViewFeed,
 } from "@/lib/feeds";
 import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+
+// Largest response to an open-ended range request (see below).
+const MAX_CHUNK_BYTES = 4 * 1024 * 1024;
+
+// Stop reading from the share as soon as the browser cancels the request
+// (e.g. the user swiped away), instead of streaming to nobody.
+function abortWith(req: NextRequest, stream: NodeJS.ReadableStream & { destroy(): void }) {
+  if (req.signal.aborted) stream.destroy();
+  else req.signal.addEventListener("abort", () => stream.destroy(), { once: true });
+}
 
 export async function GET(
   req: NextRequest,
@@ -22,8 +32,8 @@ export async function GET(
   }
 
   const feed = decodeURIComponent(params.feed);
-  if (isFeedLocked(feed) && !(session.unlocked || []).includes(feed)) {
-    return new Response("Feed locked", { status: 403 });
+  if (!canViewFeed(session, feed)) {
+    return new Response("Not found", { status: 403 });
   }
 
   const relPath = params.path.map((p) => decodeURIComponent(p)).join("/");
@@ -53,11 +63,27 @@ export async function GET(
   };
 
   if (range) {
-    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-    if (match) {
-      let start = match[1] ? parseInt(match[1], 10) : 0;
-      let end = match[2] ? parseInt(match[2], 10) : total - 1;
-      if (isNaN(start) || isNaN(end) || start > end || end >= total) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+    if (match && (match[1] || match[2])) {
+      let start: number;
+      let end: number;
+      if (!match[1]) {
+        // Suffix range "bytes=-N": the last N bytes (used to read an index
+        // stored at the end of the file, e.g. MP4s without "faststart").
+        const suffix = parseInt(match[2], 10);
+        start = Math.max(0, total - suffix);
+        end = total - 1;
+      } else {
+        start = parseInt(match[1], 10);
+        // Clamp to the file size (an end past EOF is valid per RFC 9110).
+        end = match[2] ? Math.min(parseInt(match[2], 10), total - 1) : total - 1;
+        // Open-ended request ("bytes=N-"): answer with a bounded chunk. The
+        // browser asks for the rest as it needs it. Unbounded responses keep
+        // a connection busy per preloaded video, and browsers only allow ~6
+        // per server, so the video you swipe to can be left waiting at 0:00.
+        if (!match[2]) end = Math.min(end, start + MAX_CHUNK_BYTES - 1);
+      }
+      if (isNaN(start) || isNaN(end) || start > end || start >= total) {
         return new Response("Range Not Satisfiable", {
           status: 416,
           headers: { "Content-Range": `bytes */${total}` },
@@ -65,6 +91,7 @@ export async function GET(
       }
       const chunkSize = end - start + 1;
       const nodeStream = createReadStream(abs, { start, end });
+      abortWith(req, nodeStream);
       return new Response(Readable.toWeb(nodeStream) as ReadableStream, {
         status: 206,
         headers: {
@@ -77,6 +104,7 @@ export async function GET(
   }
 
   const nodeStream = createReadStream(abs);
+  abortWith(req, nodeStream);
   return new Response(Readable.toWeb(nodeStream) as ReadableStream, {
     status: 200,
     headers: { ...baseHeaders, "Content-Length": total.toString() },

@@ -17,8 +17,8 @@ export interface SessionPayload {
   uid: string;
   username: string;
   isAdmin: boolean;
-  // Feeds the user has unlocked this session (folder names).
-  unlocked?: string[];
+  // Private feeds are visible until this time (ms since epoch), if set.
+  privateUntil?: number;
   // Whether this login used "Remember me" (keeps re-issued tokens consistent).
   remember?: boolean;
 }

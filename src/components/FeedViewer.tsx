@@ -36,6 +36,11 @@ interface Props {
 // Only slides this close to the active one mount real <video>/<img> elements;
 // the rest are empty placeholders, so an endlessly looping feed stays light.
 const RENDER_WINDOW = 2;
+const VIDEO_WINDOW = 1;
+// Stall watchdog: if a video that should be playing makes no progress for
+// this long, reload it and resume from the same spot (at most a few times).
+const STALL_MS = 4000;
+const MAX_RECOVERIES = 3;
 // How long an image stays on screen before auto-advancing (auto-play on).
 const IMAGE_SECONDS = 6;
 // Load the next page when the active slide is this close to the end.
@@ -211,6 +216,13 @@ export default function FeedViewer({
     root.scrollTop = startIndex * root.clientHeight;
     setActiveIndex(startIndex);
   }, [items.length, startIndex]);
+
+  // SlideVideo components register their <video> elements here so playback
+  // control (play/pause/seek) can reach them by slide index.
+  const registerVideo = useCallback((idx: number, el: HTMLVideoElement | null) => {
+    if (el) videoRefs.current.set(idx, el);
+    else videoRefs.current.delete(idx);
+  }, []);
 
   const clearHoldTimers = useCallback(() => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -511,7 +523,10 @@ export default function FeedViewer({
 
       <div className="viewer" ref={containerRef}>
         {items.map((item, idx) => {
-          const near = Math.abs(idx - activeIndex) <= RENDER_WINDOW;
+          const distance = Math.abs(idx - activeIndex);
+          // Videos are heavy (decoder + network connection each), so only the
+          // active one and its immediate neighbours exist; images can go wider.
+          const near = distance <= (item.type === "video" ? VIDEO_WINDOW : RENDER_WINDOW);
           const isActive = idx === activeIndex;
           return (
             <section className="slide" key={idx} data-index={idx}>
@@ -526,22 +541,21 @@ export default function FeedViewer({
                   onContextMenu={(e) => e.preventDefault()}
                 >
                   {item.type === "video" ? (
-                    <video
-                      ref={(el) => {
-                        if (el) videoRefs.current.set(idx, el);
-                        else videoRefs.current.delete(idx);
-                      }}
+                    <SlideVideo
+                      idx={idx}
                       src={item.src}
-                      playsInline
+                      register={registerVideo}
                       loop={!autoplaySetting}
                       muted={muted}
-                      preload={Math.abs(idx - activeIndex) <= 1 ? "auto" : "metadata"}
-                      onLoadedMetadata={(e) => {
-                        if (isActive) setDuration(e.currentTarget.duration);
+                      // Full preload only for the active video and the next one
+                      // (so a swipe forward starts instantly); others just metadata.
+                      preload={idx === activeIndex || idx === activeIndex + 1 ? "auto" : "metadata"}
+                      shouldPlay={isActive && !paused && holding !== "rewind" && scrub === null}
+                      onLoadedMetadata={(v) => {
+                        if (isActive) setDuration(v.duration);
                       }}
-                      onTimeUpdate={(e) => {
+                      onTimeUpdate={(v) => {
                         if (!isActive) return;
-                        const v = e.currentTarget;
                         if (v.duration) {
                           setProgress(v.currentTime / v.duration);
                           if (v.duration !== duration) setDuration(v.duration);
@@ -638,5 +652,111 @@ export default function FeedViewer({
         )}
       </div>
     </div>
+  );
+}
+
+interface SlideVideoProps {
+  idx: number;
+  src: string;
+  register: (idx: number, el: HTMLVideoElement | null) => void;
+  loop: boolean;
+  muted: boolean;
+  preload: "auto" | "metadata";
+  // Whether this video is meant to be playing right now (active slide, not
+  // paused by the user, not mid-rewind/scrub). Drives the stall watchdog.
+  shouldPlay: boolean;
+  onLoadedMetadata: (v: HTMLVideoElement) => void;
+  onTimeUpdate: (v: HTMLVideoElement) => void;
+  onEnded: () => void;
+}
+
+// One slide's <video>. Beyond rendering, it:
+// - sets/clears `src` itself so that when the slide scrolls out of the render
+//   window the download is aborted and its connection freed immediately
+//   (browsers allow only ~6 connections per server; leftover videos holding
+//   them is what left newly swiped-to videos stuck at 0:00);
+// - shows a spinner while waiting for data instead of a blank frame;
+// - recovers stalled playback by reloading and resuming from the same time,
+//   which is what swiping away and back used to do by hand.
+function SlideVideo({
+  idx,
+  src,
+  register,
+  loop,
+  muted,
+  preload,
+  shouldPlay,
+  onLoadedMetadata,
+  onTimeUpdate,
+  onEnded,
+}: SlideVideoProps) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [waiting, setWaiting] = useState(true);
+  const recoveries = useRef(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.src = src;
+    register(idx, el);
+    return () => {
+      register(idx, null);
+      el.pause();
+      el.removeAttribute("src");
+      el.load(); // aborts any in-flight request for this element
+    };
+  }, [idx, src, register]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !shouldPlay) return;
+    let lastTime = el.currentTime;
+    let lastProgressAt = Date.now();
+    const timer = setInterval(() => {
+      if (el.currentTime !== lastTime || el.ended) {
+        lastTime = el.currentTime;
+        lastProgressAt = Date.now();
+        recoveries.current = 0;
+        return;
+      }
+      if (Date.now() - lastProgressAt < STALL_MS || recoveries.current >= MAX_RECOVERIES) return;
+      recoveries.current += 1;
+      lastProgressAt = Date.now();
+      const resumeAt = el.currentTime;
+      el.load();
+      el.addEventListener(
+        "loadedmetadata",
+        () => {
+          if (resumeAt > 0) el.currentTime = resumeAt;
+          el.play().catch(() => {});
+        },
+        { once: true }
+      );
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [shouldPlay]);
+
+  return (
+    <>
+      <video
+        ref={ref}
+        playsInline
+        loop={loop}
+        muted={muted}
+        preload={preload}
+        onLoadStart={() => setWaiting(true)}
+        onWaiting={() => setWaiting(true)}
+        onStalled={() => setWaiting(true)}
+        onCanPlay={() => setWaiting(false)}
+        onPlaying={() => setWaiting(false)}
+        onLoadedMetadata={(e) => onLoadedMetadata(e.currentTarget)}
+        onTimeUpdate={(e) => {
+          if (waiting && !e.currentTarget.paused) setWaiting(false);
+          onTimeUpdate(e.currentTarget);
+        }}
+        onEnded={onEnded}
+      />
+      {shouldPlay && waiting && <div className="video-spinner spinner" aria-label="Loading" />}
+    </>
   );
 }

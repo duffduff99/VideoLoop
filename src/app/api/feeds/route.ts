@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listFeeds } from "@/lib/feeds";
+import { canViewFeed, listFeeds } from "@/lib/feeds";
 import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +9,9 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const feeds = await listFeeds();
-  const unlocked = new Set(session.unlocked || []);
+  // Private feeds are omitted entirely unless revealed in Settings.
+  const feeds = (await listFeeds()).filter((f) => canViewFeed(session, f.name));
   return NextResponse.json({
-    feeds: feeds.map((f) => ({
-      name: f.name,
-      locked: f.locked,
-      unlocked: !f.locked || unlocked.has(f.name),
-    })),
+    feeds: feeds.map((f) => ({ name: f.name, private: f.private })),
   });
 }

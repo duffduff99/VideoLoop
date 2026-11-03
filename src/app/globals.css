@@ -933,3 +933,94 @@ code {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Private feeds ---------- */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  transition: transform 0.1s;
+}
+
+.chip:active {
+  transform: scale(0.95);
+}
+
+.feed-card-tag {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.75rem;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.pill-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: transform 0.1s, opacity 0.15s;
+}
+
+.pill-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.pill-btn.primary {
+  background: var(--text);
+  color: #000;
+  border-color: var(--text);
+}
+
+.pill-btn:active {
+  transform: scale(0.95);
+}
+
+.pill-btn:disabled {
+  opacity: 0.5;
+}
+
+/* Buffering spinner over a video; fades in after a short delay so quick
+   loads don't flash it. */
+.video-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -17px 0 0 -17px;
+  pointer-events: none;
+  opacity: 0;
+  animation: spin 0.8s linear infinite, appear 0.2s ease 0.4s forwards;
+}
+
+@keyframes appear {
+  to {
+    opacity: 1;
+  }
+}

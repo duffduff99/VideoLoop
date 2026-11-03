@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GearIcon, HeartIcon, LockIcon, PlayIcon, UnlockIcon } from "@/components/Icons";
+import { EyeIcon, EyeOffIcon, GearIcon, HeartIcon, PlayIcon } from "@/components/Icons";
 
 interface Feed {
   name: string;
-  locked: boolean;
-  unlocked: boolean;
+  private: boolean;
 }
 
 // Stable, distinct gradient per feed name.
@@ -23,51 +22,31 @@ export default function HomePage() {
   const router = useRouter();
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
-  const [unlocking, setUnlocking] = useState<Feed | null>(null);
-  const [password, setPassword] = useState("");
-  const [unlockError, setUnlockError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [privateVisible, setPrivateVisible] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/feeds")
-      .then((r) => (r.ok ? r.json() : { feeds: [] }))
-      .then((d) => setFeeds(d.feeds))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const [feedRes, privRes] = await Promise.all([
+      fetch("/api/feeds").catch(() => null),
+      fetch("/api/private").catch(() => null),
+    ]);
+    const feedData = feedRes?.ok ? await feedRes.json() : { feeds: [] };
+    const privData = privRes?.ok ? await privRes.json() : { visible: false };
+    setFeeds(feedData.feeds);
+    setPrivateVisible(Boolean(privData.visible));
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    if (unlocking) setTimeout(() => inputRef.current?.focus(), 50);
-  }, [unlocking]);
+    load();
+  }, [load]);
 
-  function openFeed(feed: Feed) {
-    if (feed.locked && !feed.unlocked) {
-      setPassword("");
-      setUnlockError("");
-      setUnlocking(feed);
-      return;
-    }
-    router.push(`/feed/${encodeURIComponent(feed.name)}`);
-  }
-
-  async function submitUnlock(e: React.FormEvent) {
-    e.preventDefault();
-    if (!unlocking) return;
-    setBusy(true);
-    setUnlockError("");
-    const res = await fetch("/api/feeds/unlock", {
+  async function hidePrivate() {
+    await fetch("/api/private", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ feed: unlocking.name, password }),
+      body: JSON.stringify({ action: "hide" }),
     }).catch(() => null);
-    setBusy(false);
-    if (!res?.ok) {
-      setUnlockError("Incorrect password");
-      return;
-    }
-    const name = unlocking.name;
-    setUnlocking(null);
-    router.push(`/feed/${encodeURIComponent(name)}`);
+    load();
   }
 
   return (
@@ -77,9 +56,16 @@ export default function HomePage() {
           <span className="brand-mark"><PlayIcon size={16} /></span>
           VideoLoop
         </div>
-        <Link href="/settings" className="icon-btn ghost" aria-label="Settings">
-          <GearIcon />
-        </Link>
+        <div className="header-actions">
+          {privateVisible && (
+            <button className="chip" onClick={hidePrivate} aria-label="Hide private feeds">
+              <EyeOffIcon size={14} /> Hide private
+            </button>
+          )}
+          <Link href="/settings" className="icon-btn ghost" aria-label="Settings">
+            <GearIcon />
+          </Link>
+        </div>
       </header>
 
       <Link href="/favorites" className="fav-banner">
@@ -107,42 +93,17 @@ export default function HomePage() {
               key={feed.name}
               className="feed-card"
               style={{ background: gradientFor(feed.name) }}
-              onClick={() => openFeed(feed)}
+              onClick={() => router.push(`/feed/${encodeURIComponent(feed.name)}`)}
             >
               <span className="feed-card-play"><PlayIcon size={20} /></span>
               <span className="feed-card-name">{feed.name}</span>
-              {feed.locked && (
-                <span className="feed-card-lock">
-                  {feed.unlocked ? <UnlockIcon /> : <LockIcon />}
+              {feed.private && (
+                <span className="feed-card-tag">
+                  <EyeIcon size={12} /> Private
                 </span>
               )}
             </button>
           ))}
-        </div>
-      )}
-
-      {unlocking && (
-        <div className="sheet-backdrop" onClick={() => setUnlocking(null)}>
-          <form className="sheet" onClick={(e) => e.stopPropagation()} onSubmit={submitUnlock}>
-            <div className="sheet-handle" />
-            <h3>
-              <LockIcon size={18} /> {unlocking.name}
-            </h3>
-            <p className="sheet-sub">This feed is password protected.</p>
-            {unlockError && <div className="error">{unlockError}</div>}
-            <input
-              ref={inputRef}
-              type="password"
-              className="text-input"
-              placeholder="Feed password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="off"
-            />
-            <button className="btn" type="submit" disabled={busy || !password}>
-              {busy ? "Unlocking…" : "Unlock"}
-            </button>
-          </form>
         </div>
       )}
     </main>

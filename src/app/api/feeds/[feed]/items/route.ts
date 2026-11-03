@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listFeedItems, isFeedLocked } from "@/lib/feeds";
+import { canViewFeed, listFeedItems } from "@/lib/feeds";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 
@@ -34,9 +34,9 @@ export async function GET(
 
   const feed = decodeURIComponent(params.feed);
 
-  // Enforce feed lock.
-  if (isFeedLocked(feed) && !(session.unlocked || []).includes(feed)) {
-    return NextResponse.json({ error: "Feed locked" }, { status: 403 });
+  // Private feeds are invisible until revealed in Settings.
+  if (!canViewFeed(session, feed)) {
+    return NextResponse.json({ error: "Not found" }, { status: 403 });
   }
 
   const cursor = parseInt(req.nextUrl.searchParams.get("cursor") || "0", 10);

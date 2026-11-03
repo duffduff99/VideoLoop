@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const token = await createToken(
-    { uid: user.id, username: user.username, isAdmin: user.isAdmin, unlocked: [], remember },
+    { uid: user.id, username: user.username, isAdmin: user.isAdmin, remember },
     remember
   );
   await setSessionCookie(token, remember);

@@ -8,7 +8,7 @@ desktop browser, and install it to your home screen like an app.
 - **Feeds** come from folders on one or more SMB shares. You can pick
   exactly which folders appear with `FEEDS`.
 - **Accounts**: username/password with "Remember me". Admins add and remove users in the app.
-- **Favorites** (no comments) in a thumbnail gallery. Video **scrubbing** and hold-to-fast-forward/rewind. Per-user **auto-play next** setting. Optional **per-feed passwords**.
+- **Favorites** (no comments) in a thumbnail gallery. Video **scrubbing** and hold-to-fast-forward/rewind. Per-user **auto-play next** setting. Optional **private feeds**, hidden until you re-enter your password.
 - **Installable PWA**, with mobile-first touch controls and desktop keyboard controls.
 
 ---
@@ -175,19 +175,24 @@ FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny,Family:family
 Only those folders appear, under those names. Everything else (for example
 a `Movies` folder full of `.mkv` files) is ignored.
 
-**Password-protect a feed:** set `FEED_PASSWORDS` to comma-separated
-`Feed Name:password` entries, using the feed's display name:
+**Private feeds:** list feeds by display name in `PRIVATE_FEEDS`:
 
 ```sh
 FEEDS=Images:main/Images,Clips:main/Clips
-FEED_PASSWORDS=Clips:letmein          # locks the "Clips" feed
+PRIVATE_FEEDS=Clips
 ```
 
-Passwords can't contain commas. (A per-feed `FEED_PASSWORD_<NAME>` variable,
-e.g. `FEED_PASSWORD_CLIPS`, also works, but only from a `.env` file:
-container managers like Dockhand don't pass it through.)
+Private feeds don't appear anywhere (home screen, favorites, or direct links)
+until a user goes to **Settings → Private feeds → Show** and re-enters **their
+own account password**. They then stay visible for 12 hours (change this with
+`PRIVATE_UNLOCK_HOURS`), until the user taps **Hide** (in Settings or the
+"Hide private" chip on the home screen), or until they sign out. This is per
+device and per user.
 
-Users enter the password once per session, from the lock icon on the home screen.
+> Upgrading from feed passwords? Feeds named in the old `FEED_PASSWORDS` or
+> `FEED_PASSWORD_<NAME>` settings are automatically treated as private (the
+> old passwords are no longer used), so nothing becomes public by accident.
+> Switch to `PRIVATE_FEEDS` when convenient.
 
 ---
 
@@ -305,16 +310,15 @@ the manager's environment-variables section instead.
    | `SMB_HOST` / `SMB_SHARE` / `SMB_USER` / `SMB_PASSWORD` | `192.168.1.10` / `media` / ... |
    | `HOST_PORT` *(optional)* | `8080` if 3000 is taken (default `3000`) |
    | `FEEDS` *(optional)* | `Short Films:main/ShortFilms` |
-   | `FEED_PASSWORDS` *(optional)* | `Short Films:letmein` |
+   | `PRIVATE_FEEDS` *(optional)* | `Short Films` |
 
 3. Deploy. The first deploy **builds** the image on the server, which takes a
    few minutes. Then check the stack's logs for the
    [healthy start lines](#6-first-start).
 
 Notes:
-- **Feed passwords:** use `FEED_PASSWORDS` (e.g. `Clips:letmein`), not
-  `FEED_PASSWORD_<NAME>`. Without a `.env` file, only variables listed in
-  `docker-compose.yml` reach the app, and `FEED_PASSWORDS` is one of them.
+- **Private feeds:** set `PRIVATE_FEEDS` in the stack's variables. It's
+  passed through by `docker-compose.yml`, so no `.env` file is needed.
 - **SMB mount errors** are easiest to read from a terminal on the server
   (`docker compose up` in the stack folder). If the CIFS volume fights you,
   switch to the [host mount](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand).
@@ -378,6 +382,7 @@ docker compose logs --tail=100 videoloop
 | Favorites fail / you're bounced to login | Your browser has a login cookie from before a database reset. Sign out and back in. |
 | Home screen shows odd feeds like `cdrom`, `floppy`, `usb` | Those are empty folders built into the Alpine base image. Fixed in the current image, so rebuild/redeploy. `FEEDS` also hides them ([section 5](#5-choose-your-feeds)). |
 | A feed opens but shows **nothing** | No supported files in it. Run the `find /media ...` command from [step 6](#6-first-start) and check the extensions. iPhone `.heic` photos and `.mkv`/`.avi` videos are skipped. |
+| A video sometimes sits at 0:00 or freezes | The player now shows a spinner while buffering and automatically reloads a video that makes no progress for ~4 seconds. If one particular file keeps doing it, it's probably an MP4 with its index at the end, which forces extra round-trips to the share. Fix it without re-encoding: `ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4` |
 | Video shows black or won't play | The codec isn't browser-friendly (for example HEVC/H.265 in some browsers). Re-encode to H.264 MP4: `ffmpeg -i in.mov -c:v libx264 -c:a aac -movflags +faststart out.mp4` |
 | No "Install app" / "Add to Home Screen" option | It needs HTTPS ([section 8](#8-use-it-from-your-phone)). |
 | Port 3000 already in use | Set `HOST_PORT` (e.g. `HOST_PORT=8080`) in `.env` or your manager's environment variables, redeploy, and open port 8080 instead. |
@@ -395,7 +400,8 @@ docker compose logs --tail=100 videoloop
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | First admin account (created on first start). |
 | `ADMIN_RESET_PASSWORD` | *(unset)* | `true` resets the admin password on start. Remove it after use. |
 | `FEEDS` | *(auto)* | `Name:path,Name:path` list of feeds, with paths relative to `/media`. |
-| `FEED_PASSWORDS` | *(unset)* | `Name:password,Name:password` feed locks (see [section 5](#5-choose-your-feeds)). |
+| `PRIVATE_FEEDS` | *(unset)* | Comma-separated feed names hidden until revealed in Settings (see [section 5](#5-choose-your-feeds)). |
+| `PRIVATE_UNLOCK_HOURS` | `12` | How long private feeds stay visible after revealing. |
 | `MEDIA_ROOT` | `/media` | Where media is read from inside the container. |
 | `DATABASE_URL` | `file:/data/videoloop.db` | SQLite database location. |
 | `COOKIE_SECURE` | *(auto)* | Force the cookie `Secure` flag on or off. Normally auto-detected. |

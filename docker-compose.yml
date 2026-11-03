@@ -23,7 +23,12 @@ services:
       ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-}
       # Optional: force the cookie Secure flag (auto-detected by default).
       COOKIE_SECURE: ${COOKIE_SECURE:-}
-      # Optional: lock feeds with passwords, "Feed Name:password,Other:pw".
+      # Optional: private feeds, hidden until revealed in Settings with the
+      # user's own password, e.g. "Clips,Short Films".
+      PRIVATE_FEEDS: ${PRIVATE_FEEDS:-}
+      # Optional: hours private feeds stay visible after revealing (default 12).
+      PRIVATE_UNLOCK_HOURS: ${PRIVATE_UNLOCK_HOURS:-}
+      # Legacy: feeds named here are treated as private (passwords unused).
       FEED_PASSWORDS: ${FEED_PASSWORDS:-}
     # A local .env file is also loaded if present, but it is optional so
     # deployments without one (e.g. from Git in Dockhand) still work.

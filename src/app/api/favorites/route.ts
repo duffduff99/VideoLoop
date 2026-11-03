@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
-import { isFeedLocked, mimeFor, mediaType, resolveMediaPath } from "@/lib/feeds";
+import { canViewFeed, mimeFor, mediaType, resolveMediaPath } from "@/lib/feeds";
 import fs from "fs/promises";
 import path from "path";
 
@@ -19,12 +19,11 @@ export async function GET() {
   });
 
   // Skip favorites whose file was moved/deleted on the share, or whose feed is
-  // locked and not unlocked this session — both would render as broken slides.
-  const unlocked = new Set(session.unlocked || []);
+  // private and not currently revealed — those stay hidden.
   const playable = (
     await Promise.all(
       favs.map(async (f) => {
-        if (isFeedLocked(f.feed) && !unlocked.has(f.feed)) return null;
+        if (!canViewFeed(session, f.feed)) return null;
         const abs = await resolveMediaPath(f.feed, f.path);
         if (!abs) return null;
         const exists = await fs

@@ -93,7 +93,7 @@ using your `SMB_*` values:
 ```yaml
     volumes:
       - media_main:/media/main:ro
-      - media_family:/media/family:ro
+      # - media_family:/media/family:ro
 
 volumes:
   media_main:
@@ -106,11 +106,10 @@ volumes:
 
 - The host needs CIFS support: `sudo apt install cifs-utils` (Debian/Ubuntu)
   or `sudo dnf install cifs-utils` (Fedora).
-- **Only one share?** Delete the `media_family` lines (both the entry under the
-  service's `volumes:` and the block under the top-level `volumes:`). Otherwise
-  Compose will try to mount a second share using the `SMB2_*` placeholders.
-- **More shares?** Copy a block, give it a new name, and add matching
-  `SMB3_*` values.
+- One share is enabled by default. **More shares?** Uncomment `media_family`
+  (both the line under the service's `volumes:` and its block under the
+  top-level `volumes:`) and set the `SMB2_*` values. Use `media_extra` / `SMB3_*`
+  for a third.
 - `vers=3.0` works for most NAS devices. Older ones may need `vers=2.1` or `vers=1.0`.
 - `uid=1001,gid=1001` matches the user the app runs as. Leave it as is.
 - To mount only part of a share, put the path in `SMB_SHARE`, for example
@@ -164,7 +163,7 @@ You don't need the `SMB_*` values in `.env` with this option.
 
 **Default:** every folder directly under `/media` becomes a feed, and
 everything inside it (including subfolders) plays in that feed. With the
-compose file above, that gives you one feed per share (`main`, `family`).
+compose file above, that gives you one feed per share (e.g. `main`).
 
 **Pick exact folders:** set `FEEDS` in `.env`. Each entry is
 `Display Name:path`, separated by commas, and the path is relative to `/media`:
@@ -280,20 +279,41 @@ In that case the first clip starts muted, and the speaker icon shows it.
 
 ## 9. Running with Dockhand / Dockge / Portainer
 
-These tools run the same `docker-compose.yml`, so the steps above still apply.
+These tools run the same `docker-compose.yml`. A `.env` file is **not**
+required: `.env` is deliberately left out of Git (it holds passwords), so a
+stack deployed from the Git repository won't have one. Enter the settings in
+the manager's environment-variables section instead.
 
-1. **Get it working once from a terminal first** ([step 6](#6-first-start)).
-   SMB mount errors are much easier to read there.
-2. In your manager, create a new stack/project from this folder, or paste in
+**Dockhand, deploying from Git:**
+
+1. Create a stack from the Git repository
+   (`https://github.com/duffduff99/VideoLoop.git`, branch
+   `claude/keen-faraday-ad1c3e` until it's merged), with compose file
    `docker-compose.yml`.
-3. Add your `.env` values in the manager's environment section, or keep the
-   `.env` file next to the compose file. Many managers read it automatically.
-4. The compose file **builds** the image (`build: .`), so the manager needs
-   access to the source folder. If yours can only pull pre-built images, build
-   on the server with `docker compose build` and keep `image: videoloop:latest`.
-5. Prefer [Option B (host mount)](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand)
-   for the media. Adding a bind-mount path in a GUI is simpler than setting up
-   CIFS driver options.
+2. In the stack's **environment variables**, add:
+
+   | Variable | Example |
+   |---|---|
+   | `SESSION_SECRET` | output of `openssl rand -hex 32` **(required)** |
+   | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / something strong |
+   | `SMB_HOST` / `SMB_SHARE` / `SMB_USER` / `SMB_PASSWORD` | `192.168.1.10` / `media` / ... |
+   | `FEEDS` *(optional)* | `Short Films:main/ShortFilms` |
+
+3. Deploy. The first deploy **builds** the image on the server, which takes a
+   few minutes. Then check the stack's logs for the
+   [healthy start lines](#6-first-start).
+
+Notes:
+- **Feed passwords:** a `FEED_PASSWORD_<NAME>` variable only reaches the app
+  if `docker-compose.yml` passes it through. For each locked feed, add a line
+  under `environment:` (there's a commented example), e.g.
+  `FEED_PASSWORD_SHORT_FILMS: ${FEED_PASSWORD_SHORT_FILMS}`, and set the value
+  in the stack's variables.
+- **SMB mount errors** are easiest to read from a terminal on the server
+  (`docker compose up` in the stack folder). If the CIFS volume fights you,
+  switch to the [host mount](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand).
+- **Updating:** redeploy/pull the stack in the manager. It rebuilds from the
+  latest commit on the branch.
 
 ---
 
@@ -343,7 +363,9 @@ docker compose logs --tail=100 videoloop
 | Symptom | Likely cause and fix |
 |---|---|
 | Container keeps **restarting** | Read the logs. If it fails right at start with `mount error` / `cifs` / `Host is down` / `Permission denied`, the SMB mount failed: check host/share/credentials, try another `vers=`, install `cifs-utils`, or switch to [Option B](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand). |
-| Compose error about `SMB2_HOST`, or a second share failing to mount | You only have one share. Remove the `media_family` entries ([Option A](#option-a-docker-cifs-volume-linux-hosts)). |
+| `env file .../.env not found` when deploying | You're on an old `docker-compose.yml`. Pull the latest code: `.env` is now optional, and settings can come from your container manager's environment variables ([section 9](#9-running-with-dockhand--dockge--portainer)). |
+| `required variable SESSION_SECRET is missing a value` | Set `SESSION_SECRET` in `.env` or in your manager's environment variables. |
+| A second share fails to mount | Set its `SMB2_*` values, or comment `media_family` back out ([Option A](#option-a-docker-cifs-volume-linux-hosts)). |
 | Logs mention **Prisma / OpenSSL / engines** | You're running an old image. Run `git pull` and `docker compose build --no-cache`. |
 | **"Invalid username or password"** with the `.env` credentials | The admin is only created when the database is empty. Check `docker compose logs videoloop \| grep seed`. If it says "Users already exist", use `ADMIN_RESET_PASSWORD=true` ([section 10](#10-updating-backups-resetting)). Usernames are case-sensitive. |
 | Sign-in works on the server but **the phone keeps returning to the login page** | Make sure you're on the latest code (older builds set an HTTPS-only cookie). If you're behind HTTPS, check that the proxy sends `X-Forwarded-Proto`, or set `COOKIE_SECURE=true`. |

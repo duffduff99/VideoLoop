@@ -6,33 +6,42 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    # Settings come from environment variables: either a .env file next to
+    # this compose file, or the environment-variables section of a container
+    # manager such as Dockhand / Dockge / Portainer (no .env file needed).
     environment:
-      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_SECRET: "${SESSION_SECRET:?Set SESSION_SECRET to a long random string, e.g. from openssl rand -hex 32}"
       MEDIA_ROOT: /media
-      # Optional: choose/point feeds at specific subfolders (see .env.example).
-      FEEDS: ${FEEDS:-}
+      DATABASE_URL: file:/data/videoloop.db
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
-      DATABASE_URL: file:/data/videoloop.db
-      # Everything else in .env (FEED_PASSWORD_*, ADMIN_RESET_PASSWORD,
-      # COOKIE_SECURE, ...) is passed into the container via env_file below.
+      # Optional: choose/point feeds at specific subfolders (see .env.example).
+      FEEDS: ${FEEDS:-}
+      # Optional: set to true once to reset the admin password, then remove.
+      ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-}
+      # Optional: force the cookie Secure flag (auto-detected by default).
+      COOKIE_SECURE: ${COOKIE_SECURE:-}
+      # Per-feed passwords: add one line per locked feed, e.g.
+      # FEED_PASSWORD_SHORT_FILMS: ${FEED_PASSWORD_SHORT_FILMS}
+    # A local .env file is also loaded if present (handy for FEED_PASSWORD_*
+    # entries), but it is optional so deployments without one still work.
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
-      # Persistent SQLite database.
+      # Persistent SQLite database (users, favorites, settings).
       - videoloop-data:/data
       # Each SMB share is mounted into its own subfolder of /media. Every
-      # top-level folder under /media becomes a selectable "feed", so you can
-      # mount as many shares as you like — just add a volume + a named volume
-      # definition below for each one.
+      # top-level folder under /media becomes a feed (or pick folders with
+      # FEEDS). To add a share, uncomment one below plus its block further down.
       - media_main:/media/main:ro
-      - media_family:/media/family:ro
+      # - media_family:/media/family:ro
       # - media_extra:/media/extra:ro
 
 volumes:
   videoloop-data:
 
-  # ---- SMB share #1 ----
+  # ---- SMB share #1 (uses SMB_HOST / SMB_SHARE / SMB_USER / SMB_PASSWORD) ----
   media_main:
     driver: local
     driver_opts:
@@ -40,13 +49,13 @@ volumes:
       o: "username=${SMB_USER},password=${SMB_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
       device: "//${SMB_HOST}/${SMB_SHARE}"
 
-  # ---- SMB share #2 (different share, can be a different host/credentials) ----
-  media_family:
-    driver: local
-    driver_opts:
-      type: cifs
-      o: "username=${SMB2_USER},password=${SMB2_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
-      device: "//${SMB2_HOST}/${SMB2_SHARE}"
+  # ---- SMB share #2 (optional; can be a different host/credentials) ----
+  # media_family:
+  #   driver: local
+  #   driver_opts:
+  #     type: cifs
+  #     o: "username=${SMB2_USER},password=${SMB2_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
+  #     device: "//${SMB2_HOST}/${SMB2_SHARE}"
 
   # ---- SMB share #3 (optional) ----
   # media_extra:

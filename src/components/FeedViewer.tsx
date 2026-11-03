@@ -27,6 +27,10 @@ interface Props {
   fetchPage: (cursor: number, cycle: number) => Promise<PageResult>;
   autoplaySetting: boolean;
   title: string;
+  // Slide to open on once the first page has loaded (e.g. from a gallery).
+  startIndex?: number;
+  // Where the back button / Esc goes. Defaults to the feed list.
+  onBack?: () => void;
 }
 
 // Only slides this close to the active one mount real <video>/<img> elements;
@@ -37,6 +41,21 @@ const IMAGE_SECONDS = 6;
 // Load the next page when the active slide is this close to the end.
 const PREFETCH_AHEAD = 3;
 const DOUBLE_TAP_MS = 260;
+// Press-and-hold on a video side: after this delay, fast-forward (right half)
+// or rewind (left half) at HOLD_SPEED until released.
+const HOLD_DELAY_MS = 350;
+const HOLD_SPEED = 2;
+// A finger moving further than this is a swipe, not a tap/hold.
+const MOVE_TOLERANCE_PX = 12;
+
+function formatTime(seconds: number): string {
+  if (!isFinite(seconds) || seconds < 0) seconds = 0;
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
 
 function prettyName(name: string): string {
   return name
@@ -62,8 +81,15 @@ function writeMutedPref(muted: boolean) {
   }
 }
 
-export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props) {
+export default function FeedViewer({
+  fetchPage,
+  autoplaySetting,
+  title,
+  startIndex = 0,
+  onBack,
+}: Props) {
   const router = useRouter();
+  const goBack = useCallback(() => (onBack ? onBack() : router.push("/")), [onBack, router]);
   const [items, setItems] = useState<Item[]>([]);
   const [muted, setMutedState] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -71,7 +97,17 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
   const [exhausted, setExhausted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  // Scrubbing via the draggable progress bar (ratio 0..1 while dragging).
+  const [scrub, setScrub] = useState<number | null>(null);
+  // Press-and-hold seek direction while active.
+  const [holding, setHolding] = useState<"forward" | "rewind" | null>(null);
   const [flash, setFlash] = useState<{ kind: "play" | "heart"; key: number } | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rewindTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const holdFired = useRef(false);
+  const startApplied = useRef(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
@@ -165,20 +201,50 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
     return () => io.disconnect();
   }, [items.length]);
 
+  // Open on a specific slide (e.g. tapped in the favorites gallery) once it
+  // has been loaded. Jump instantly rather than animating through the feed.
+  useEffect(() => {
+    if (startApplied.current || startIndex <= 0 || items.length <= startIndex) return;
+    const root = containerRef.current;
+    if (!root) return;
+    startApplied.current = true;
+    root.scrollTop = startIndex * root.clientHeight;
+    setActiveIndex(startIndex);
+  }, [items.length, startIndex]);
+
+  const clearHoldTimers = useCallback(() => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    if (rewindTimer.current) clearInterval(rewindTimer.current);
+    holdTimer.current = null;
+    rewindTimer.current = null;
+  }, []);
+
+  const stopHold = useCallback(() => {
+    clearHoldTimers();
+    setHolding(null);
+  }, [clearHoldTimers]);
+
   // New active slide: reset transient playback UI.
   useEffect(() => {
     setPaused(false);
     setProgress(0);
+    setScrub(null);
     setFlash(null);
-  }, [activeIndex]);
+    stopHold();
+    const v = videoRefs.current.get(activeIndex);
+    setDuration(v && isFinite(v.duration) ? v.duration : 0);
+  }, [activeIndex, stopHold]);
 
   // Drive playback: play the active video, pause the others. If the browser
   // blocks autoplay with sound, fall back to muted so playback still starts.
+  // Hold-to-seek lives here too: fast-forward raises the playback rate, and
+  // rewind keeps the video paused while a timer steps it backwards.
   useEffect(() => {
     videoRefs.current.forEach((video, idx) => {
       if (idx === activeIndex) {
         video.muted = muted;
-        if (paused) {
+        video.playbackRate = holding === "forward" ? HOLD_SPEED : 1;
+        if (paused || holding === "rewind") {
           video.pause();
           return;
         }
@@ -193,10 +259,11 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
         });
       } else if (!video.paused || video.currentTime > 0) {
         video.pause();
+        video.playbackRate = 1;
         video.currentTime = 0;
       }
     });
-  }, [activeIndex, muted, paused, items.length]);
+  }, [activeIndex, muted, paused, holding, items.length]);
 
   // Pause when the app/tab is hidden; resume when it comes back.
   useEffect(() => {
@@ -263,6 +330,96 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
     setPaused(!paused);
   }, [items, activeIndex, paused]);
 
+  // Seek the active video by a number of seconds (keyboard arrows).
+  const seekBy = useCallback(
+    (delta: number) => {
+      const v = videoRefs.current.get(activeIndex);
+      if (!v || !isFinite(v.duration)) return;
+      v.currentTime = Math.min(Math.max(0, v.currentTime + delta), v.duration);
+    },
+    [activeIndex]
+  );
+
+  // ---- Press-and-hold to fast-forward / rewind (videos only) ----
+  function onMediaPointerDown(e: React.PointerEvent<HTMLDivElement>, idx: number) {
+    pointerStart.current = { x: e.clientX, y: e.clientY };
+    holdFired.current = false;
+    clearHoldTimers();
+    if (idx !== activeIndex || items[idx]?.type !== "video") return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const side = e.clientX > rect.left + rect.width / 2 ? "forward" : "rewind";
+    holdTimer.current = setTimeout(() => {
+      holdFired.current = true;
+      setHolding(side);
+      if (side === "forward") {
+        setPaused(false);
+      } else {
+        const step = (HOLD_SPEED * 100) / 1000; // seconds per 100ms tick
+        rewindTimer.current = setInterval(() => {
+          const v = videoRefs.current.get(idx);
+          if (v) v.currentTime = Math.max(0, v.currentTime - step);
+        }, 100);
+      }
+    }, HOLD_DELAY_MS);
+  }
+
+  function onMediaPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const start = pointerStart.current;
+    if (!start || holdFired.current) return;
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > MOVE_TOLERANCE_PX) {
+      // It's a swipe, not a hold or a tap.
+      clearHoldTimers();
+      pointerStart.current = null;
+    }
+  }
+
+  function onMediaPointerUp(idx: number) {
+    const wasTap = pointerStart.current !== null && !holdFired.current;
+    pointerStart.current = null;
+    if (holdFired.current) {
+      holdFired.current = false;
+      stopHold();
+      return;
+    }
+    clearHoldTimers();
+    if (wasTap) onSlideTap(idx);
+  }
+
+  function onMediaPointerCancel() {
+    // The browser took over (scroll started) — abandon any tap/hold.
+    pointerStart.current = null;
+    holdFired.current = false;
+    stopHold();
+  }
+
+  // ---- Draggable progress bar (scrubbing) ----
+  function scrubTo(e: React.PointerEvent<HTMLDivElement>) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(Math.max((e.clientX - rect.left) / rect.width, 0), 1);
+    setScrub(ratio);
+    const v = videoRefs.current.get(activeIndex);
+    if (v && isFinite(v.duration)) v.currentTime = ratio * v.duration;
+  }
+
+  function onScrubDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    scrubTo(e);
+  }
+
+  function onScrubMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (scrub === null) return;
+    scrubTo(e);
+  }
+
+  function onScrubEnd(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    if (scrub !== null) setProgress(scrub);
+    setScrub(null);
+  }
+
   // Single tap = play/pause, double tap = favorite (with a heart burst).
   function onSlideTap(idx: number) {
     if (tapTimer.current) {
@@ -302,22 +459,36 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
         case "m":
           setMuted((m) => !m);
           break;
+        case "ArrowRight":
+        case "l":
+          e.preventDefault();
+          seekBy(5);
+          break;
+        case "ArrowLeft":
+        case "h":
+          e.preventDefault();
+          seekBy(-5);
+          break;
         case "f":
           setFavorite(activeIndex);
           break;
         case "Escape":
-          router.push("/");
+          goBack();
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeIndex, goTo, togglePause, setMuted, setFavorite, router]);
+  }, [activeIndex, goTo, togglePause, setMuted, setFavorite, seekBy, goBack]);
 
-  // Clear any pending single-tap timer on unmount.
-  useEffect(() => () => {
-    if (tapTimer.current) clearTimeout(tapTimer.current);
-  }, []);
+  // Clear any pending timers on unmount.
+  useEffect(
+    () => () => {
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      clearHoldTimers();
+    },
+    [clearHoldTimers]
+  );
 
   const showImageProgress =
     autoplaySetting && activeItem?.type === "image" && !paused;
@@ -325,7 +496,7 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
   return (
     <div className="viewer-shell">
       <div className="viewer-topbar">
-        <button className="icon-btn" onClick={() => router.push("/")} aria-label="Back to feeds">
+        <button className="icon-btn" onClick={goBack} aria-label="Back">
           <BackIcon />
         </button>
         <div className="viewer-title">{title}</div>
@@ -345,7 +516,15 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
           return (
             <section className="slide" key={idx} data-index={idx}>
               {near && (
-                <div className="slide-media" onClick={() => onSlideTap(idx)}>
+                <div
+                  className="slide-media"
+                  onPointerDown={(e) => onMediaPointerDown(e, idx)}
+                  onPointerMove={onMediaPointerMove}
+                  onPointerUp={() => onMediaPointerUp(idx)}
+                  onPointerCancel={onMediaPointerCancel}
+                  onPointerLeave={() => holdFired.current && stopHold()}
+                  onContextMenu={(e) => e.preventDefault()}
+                >
                   {item.type === "video" ? (
                     <video
                       ref={(el) => {
@@ -357,10 +536,16 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
                       loop={!autoplaySetting}
                       muted={muted}
                       preload={Math.abs(idx - activeIndex) <= 1 ? "auto" : "metadata"}
+                      onLoadedMetadata={(e) => {
+                        if (isActive) setDuration(e.currentTarget.duration);
+                      }}
                       onTimeUpdate={(e) => {
                         if (!isActive) return;
                         const v = e.currentTarget;
-                        if (v.duration) setProgress(v.currentTime / v.duration);
+                        if (v.duration) {
+                          setProgress(v.currentTime / v.duration);
+                          if (v.duration !== duration) setDuration(v.duration);
+                        }
                       }}
                       onEnded={() => {
                         if (autoplaySetting && isActive) advance();
@@ -399,9 +584,38 @@ export default function FeedViewer({ fetchPage, autoplaySetting, title }: Props)
                 <div className="caption-name">{prettyName(item.name)}</div>
               </div>
 
+              {isActive && holding && (
+                <div className="hold-badge">
+                  {holding === "forward" ? `${HOLD_SPEED}× ▶▶` : `◀◀ ${HOLD_SPEED}×`}
+                </div>
+              )}
+
+              {isActive && scrub !== null && (
+                <div className="scrub-time">
+                  {formatTime(scrub * duration)} <span>/ {formatTime(duration)}</span>
+                </div>
+              )}
+
               {isActive && item.type === "video" && (
-                <div className="progress">
-                  <div className="progress-fill" style={{ transform: `scaleX(${progress})` }} />
+                <div
+                  className={`scrubber ${scrub !== null ? "dragging" : ""}`}
+                  onPointerDown={onScrubDown}
+                  onPointerMove={onScrubMove}
+                  onPointerUp={onScrubEnd}
+                  onPointerCancel={onScrubEnd}
+                  role="slider"
+                  aria-label="Seek"
+                  aria-valuemin={0}
+                  aria-valuemax={Math.round(duration)}
+                  aria-valuenow={Math.round((scrub ?? progress) * duration)}
+                >
+                  <div className="scrub-track">
+                    <div
+                      className="progress-fill"
+                      style={{ transform: `scaleX(${scrub ?? progress})` }}
+                    />
+                    <div className="scrub-thumb" style={{ left: `${(scrub ?? progress) * 100}%` }} />
+                  </div>
                 </div>
               )}
               {isActive && showImageProgress && (

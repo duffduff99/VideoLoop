@@ -96,8 +96,9 @@ export default function SettingsPage() {
           </div>
 
           <p className="hint">
-            Tip: tap to pause, double-tap to favorite. On desktop use ↑/↓ or J/K, Space, M to mute,
-            F to favorite.
+            Tip: tap to pause, double-tap to favorite, hold the right/left side of a video to
+            fast-forward/rewind, or drag the progress bar. On desktop: ↑/↓ or J/K to move, ←/→ to skip
+            5s, Space, M to mute, F to favorite.
           </p>
         </>
       )}

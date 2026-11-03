@@ -8,7 +8,7 @@ desktop browser, and install it to your home screen like an app.
 - **Feeds** come from folders on one or more SMB shares. You can pick
   exactly which folders appear with `FEEDS`.
 - **Accounts**: username/password with "Remember me". Admins add and remove users in the app.
-- **Favorites** (no comments). Per-user **auto-play next** setting. Optional **per-feed passwords**.
+- **Favorites** (no comments) in a thumbnail gallery. Video **scrubbing** and hold-to-fast-forward/rewind. Per-user **auto-play next** setting. Optional **per-feed passwords**.
 - **Installable PWA**, with mobile-first touch controls and desktop keyboard controls.
 
 ---
@@ -268,6 +268,8 @@ It opens full-screen with no browser bars.
 |---|---|---|
 | Next / previous | Swipe up / down | ↓ / ↑, J / K, Page Down / Page Up, mouse wheel |
 | Pause / play | Tap | Space |
+| Fast-forward / rewind (2×) | Press and hold the right / left side of a video | |
+| Jump to a point | Drag the progress bar at the bottom | Click/drag the progress bar, ← / → skip 5s |
 | Favorite | Double-tap or ♥ | F |
 | Mute | Speaker icon (top right) | M |
 | Back to feeds | ‹ (top left) | Esc |

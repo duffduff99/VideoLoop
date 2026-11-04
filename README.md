@@ -92,11 +92,11 @@ using your `SMB_*` values:
 
 ```yaml
     volumes:
-      - media_main:/media/main:ro
-      - media_secondary:/media/secondary:ro
+      - smb_main:/media/main:ro
+      - smb_secondary:/media/secondary:ro
 
 volumes:
-  media_main:
+  smb_main:
     driver: local
     driver_opts:
       type: cifs
@@ -106,13 +106,13 @@ volumes:
 
 - The host needs CIFS support: `sudo apt install cifs-utils` (Debian/Ubuntu)
   or `sudo dnf install cifs-utils` (Fedora).
-- **Two shares** are enabled: `media_main` → `/media/main` (`SMB_*` values) and
-  `media_secondary` → `/media/secondary` (`SMB2_*` values). They can be on
+- **Two shares** are enabled: `smb_main` → `/media/main` (`SMB_*` values) and
+  `smb_secondary` → `/media/secondary` (`SMB2_*` values). They can be on
   different servers with different credentials.
-- **Only one share?** Comment out `media_secondary` (both its line under the
+- **Only one share?** Comment out `smb_secondary` (both its line under the
   service's `volumes:` and its block under the top-level `volumes:`).
   Otherwise the deploy stops asking for the `SMB2_*` values.
-- **A third share?** Uncomment `media_extra` and set the `SMB3_*` values.
+- **A third share?** Uncomment `smb_extra` and set the `SMB3_*` values.
 - `vers=3.0` works for most NAS devices. Older ones may need `vers=2.1` or `vers=1.0`.
 - `uid=1001,gid=1001` matches the user the app runs as. Leave it as is.
 - To mount only part of a share, put the path in `SMB_SHARE`, for example
@@ -147,8 +147,8 @@ or NAS. If you need it on Windows, mount the share inside your WSL distro
 (`sudo mkdir -p /mnt/smb/main && sudo mount -t drvfs '\\192.168.1.10\media' /mnt/smb/main`),
 then run `docker compose` from that WSL shell and use `/mnt/smb/main` as the path below.
 
-Then edit `docker-compose.yml`. Replace the `media_*` volume lines with bind
-mounts, and delete the `media_*` blocks under the top-level `volumes:`
+Then edit `docker-compose.yml`. Replace the `smb_*` volume lines with bind
+mounts, and delete the `smb_*` blocks under the top-level `volumes:`
 (keep `videoloop-data`):
 
 ```yaml
@@ -378,7 +378,9 @@ docker compose logs --tail=100 videoloop
 | Container keeps **restarting** | Read the logs. If it fails right at start with `mount error` / `cifs` / `Host is down` / `Permission denied`, the SMB mount failed: check host/share/credentials, try another `vers=`, install `cifs-utils`, or switch to [Option B](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand). |
 | `env file .../.env not found` when deploying | You're on an old `docker-compose.yml`. Pull the latest code: `.env` is now optional, and settings can come from your container manager's environment variables ([section 9](#9-running-with-dockhand--dockge--portainer)). |
 | `required variable SESSION_SECRET is missing a value` | Set `SESSION_SECRET` in `.env` or in your manager's environment variables. |
-| `required variable SMB2_HOST is missing a value` (or another `SMB2_*`) | The secondary share is enabled. Set its `SMB2_*` values, or comment `media_secondary` out if you only have one share ([Option A](#option-a-docker-cifs-volume-linux-hosts)). |
+| Changed `SMB_*`/`SMB2_*` values but the mount still uses the old share, host or user | Docker reuses an SMB volume once it exists. Delete it on the server (`docker volume rm videoloop_smb_main`; it's recreated on deploy) or rename the volume in `docker-compose.yml` (e.g. `smb_main` → `smb_main2`, in both places). Leave `videoloop-data` alone, since it holds users and favorites. |
+| `mount error ... no route to host` | The Docker server can't reach the file server on port 445. On the Docker server, check `getent hosts <SMB host>` gives the right IP and `nc -zv <SMB host> 445` connects. Usually it's a firewall on the file server (on Windows, allow **File and Printer Sharing (SMB-In)**) or between networks. |
+| `required variable SMB2_HOST is missing a value` (or another `SMB2_*`) | The secondary share is enabled. Set its `SMB2_*` values, or comment `smb_secondary` out if you only have one share ([Option A](#option-a-docker-cifs-volume-linux-hosts)). |
 | Logs mention **Prisma / OpenSSL / engines** | You're running an old image. Run `git pull` and `docker compose build --no-cache`. |
 | **"Invalid username or password"** with the `.env` credentials | The admin is only created when the database is empty. Check `docker compose logs videoloop \| grep seed`. If it says "Users already exist", use `ADMIN_RESET_PASSWORD=true` ([section 10](#10-updating-backups-resetting)). Usernames are case-sensitive. |
 | Sign-in works on the server but **the phone keeps returning to the login page** | Make sure you're on the latest code (older builds set an HTTPS-only cookie). If you're behind HTTPS, check that the proxy sends `X-Forwarded-Proto`, or set `COOKIE_SECURE=true`. |

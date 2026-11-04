@@ -41,16 +41,21 @@ services:
       # Each SMB share is mounted into its own subfolder of /media. Every
       # top-level folder under /media becomes a feed (or pick folders with
       # FEEDS, e.g. "Short Videos:secondary/Short Videos").
-      - media_main:/media/main:ro
-      - media_secondary:/media/secondary:ro
+      - smb_main:/media/main:ro
+      - smb_secondary:/media/secondary:ro
       # To add a third share, uncomment this line plus its block further down.
-      # - media_extra:/media/extra:ro
+      # - smb_extra:/media/extra:ro
 
 volumes:
   videoloop-data:
 
+  # NOTE: Docker creates each SMB volume once and keeps reusing it, so later
+  # changes to the SMB_* / SMB2_* values are NOT picked up by a redeploy. To
+  # apply new share settings, delete the volume (docker volume rm
+  # videoloop_smb_main) or rename it here (e.g. smb_main -> smb_main2).
+
   # ---- SMB share #1 (uses SMB_HOST / SMB_SHARE / SMB_USER / SMB_PASSWORD) ----
-  media_main:
+  smb_main:
     driver: local
     driver_opts:
       type: cifs
@@ -59,7 +64,7 @@ volumes:
 
   # ---- SMB share #2 -> /media/secondary (SMB2_HOST / SMB2_SHARE / SMB2_USER /
   # SMB2_PASSWORD). Only one share? Comment out this block and its line above.
-  media_secondary:
+  smb_secondary:
     driver: local
     driver_opts:
       type: cifs
@@ -67,7 +72,7 @@ volumes:
       device: "//${SMB2_HOST:?Set SMB2_HOST for the secondary share}/${SMB2_SHARE:?Set SMB2_SHARE for the secondary share}"
 
   # ---- SMB share #3 (optional) ----
-  # media_extra:
+  # smb_extra:
   #   driver: local
   #   driver_opts:
   #     type: cifs

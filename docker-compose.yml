@@ -40,9 +40,10 @@ services:
       - videoloop-data:/data
       # Each SMB share is mounted into its own subfolder of /media. Every
       # top-level folder under /media becomes a feed (or pick folders with
-      # FEEDS). To add a share, uncomment one below plus its block further down.
+      # FEEDS, e.g. "Short Videos:secondary/Short Videos").
       - media_main:/media/main:ro
-      # - media_family:/media/family:ro
+      - media_secondary:/media/secondary:ro
+      # To add a third share, uncomment this line plus its block further down.
       # - media_extra:/media/extra:ro
 
 volumes:
@@ -56,13 +57,14 @@ volumes:
       o: "username=${SMB_USER},password=${SMB_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
       device: "//${SMB_HOST}/${SMB_SHARE}"
 
-  # ---- SMB share #2 (optional; can be a different host/credentials) ----
-  # media_family:
-  #   driver: local
-  #   driver_opts:
-  #     type: cifs
-  #     o: "username=${SMB2_USER},password=${SMB2_PASSWORD},uid=1001,gid=1001,ro,vers=3.0"
-  #     device: "//${SMB2_HOST}/${SMB2_SHARE}"
+  # ---- SMB share #2 -> /media/secondary (SMB2_HOST / SMB2_SHARE / SMB2_USER /
+  # SMB2_PASSWORD). Only one share? Comment out this block and its line above.
+  media_secondary:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=${SMB2_USER:?Set SMB2_USER for the secondary share},password=${SMB2_PASSWORD:?Set SMB2_PASSWORD for the secondary share},uid=1001,gid=1001,ro,vers=3.0"
+      device: "//${SMB2_HOST:?Set SMB2_HOST for the secondary share}/${SMB2_SHARE:?Set SMB2_SHARE for the secondary share}"
 
   # ---- SMB share #3 (optional) ----
   # media_extra:

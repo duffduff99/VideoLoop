@@ -93,7 +93,7 @@ using your `SMB_*` values:
 ```yaml
     volumes:
       - media_main:/media/main:ro
-      # - media_family:/media/family:ro
+      - media_secondary:/media/secondary:ro
 
 volumes:
   media_main:
@@ -106,10 +106,13 @@ volumes:
 
 - The host needs CIFS support: `sudo apt install cifs-utils` (Debian/Ubuntu)
   or `sudo dnf install cifs-utils` (Fedora).
-- One share is enabled by default. **More shares?** Uncomment `media_family`
-  (both the line under the service's `volumes:` and its block under the
-  top-level `volumes:`) and set the `SMB2_*` values. Use `media_extra` / `SMB3_*`
-  for a third.
+- **Two shares** are enabled: `media_main` → `/media/main` (`SMB_*` values) and
+  `media_secondary` → `/media/secondary` (`SMB2_*` values). They can be on
+  different servers with different credentials.
+- **Only one share?** Comment out `media_secondary` (both its line under the
+  service's `volumes:` and its block under the top-level `volumes:`).
+  Otherwise the deploy stops asking for the `SMB2_*` values.
+- **A third share?** Uncomment `media_extra` and set the `SMB3_*` values.
 - `vers=3.0` works for most NAS devices. Older ones may need `vers=2.1` or `vers=1.0`.
 - `uid=1001,gid=1001` matches the user the app runs as. Leave it as is.
 - To mount only part of a share, put the path in `SMB_SHARE`, for example
@@ -169,7 +172,7 @@ compose file above, that gives you one feed per share (e.g. `main`).
 `Display Name:path`, separated by commas, and the path is relative to `/media`:
 
 ```sh
-FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny,Family:family
+FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny,Short Videos:secondary/Short Videos
 ```
 
 Only those folders appear, under those names. Everything else (for example
@@ -375,7 +378,7 @@ docker compose logs --tail=100 videoloop
 | Container keeps **restarting** | Read the logs. If it fails right at start with `mount error` / `cifs` / `Host is down` / `Permission denied`, the SMB mount failed: check host/share/credentials, try another `vers=`, install `cifs-utils`, or switch to [Option B](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand). |
 | `env file .../.env not found` when deploying | You're on an old `docker-compose.yml`. Pull the latest code: `.env` is now optional, and settings can come from your container manager's environment variables ([section 9](#9-running-with-dockhand--dockge--portainer)). |
 | `required variable SESSION_SECRET is missing a value` | Set `SESSION_SECRET` in `.env` or in your manager's environment variables. |
-| A second share fails to mount | Set its `SMB2_*` values, or comment `media_family` back out ([Option A](#option-a-docker-cifs-volume-linux-hosts)). |
+| `required variable SMB2_HOST is missing a value` (or another `SMB2_*`) | The secondary share is enabled. Set its `SMB2_*` values, or comment `media_secondary` out if you only have one share ([Option A](#option-a-docker-cifs-volume-linux-hosts)). |
 | Logs mention **Prisma / OpenSSL / engines** | You're running an old image. Run `git pull` and `docker compose build --no-cache`. |
 | **"Invalid username or password"** with the `.env` credentials | The admin is only created when the database is empty. Check `docker compose logs videoloop \| grep seed`. If it says "Users already exist", use `ADMIN_RESET_PASSWORD=true` ([section 10](#10-updating-backups-resetting)). Usernames are case-sensitive. |
 | Sign-in works on the server but **the phone keeps returning to the login page** | Make sure you're on the latest code (older builds set an HTTPS-only cookie). If you're behind HTTPS, check that the proxy sends `X-Forwarded-Proto`, or set `COOKIE_SECURE=true`. |

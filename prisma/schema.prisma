@@ -32,3 +32,19 @@ model Favorite {
   @@unique([userId, feed, path])
   @@index([userId])
 }
+
+// A feed (playlist) shown on the home screen: a display name pointing at a
+// folder below MEDIA_ROOT. Managed in the app under Settings -> Manage feeds.
+model Feed {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  path      String // folder relative to MEDIA_ROOT, e.g. "main/Short Films"
+  isPrivate Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// Small key/value store for app-level flags.
+model Setting {
+  key   String @id
+  value String
+}

@@ -17,18 +17,16 @@ services:
       DATABASE_URL: file:/data/videoloop.db
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-changeme}
-      # Optional: choose/point feeds at specific subfolders (see .env.example).
+      # Feeds are managed in the app (Settings -> Manage feeds). FEEDS and
+      # PRIVATE_FEEDS are legacy: read once to import feeds after upgrading.
       FEEDS: ${FEEDS:-}
       # Optional: set to true once to reset the admin password, then remove.
       ADMIN_RESET_PASSWORD: ${ADMIN_RESET_PASSWORD:-}
       # Optional: force the cookie Secure flag (auto-detected by default).
       COOKIE_SECURE: ${COOKIE_SECURE:-}
-      # Optional: private feeds, hidden until revealed in Settings with the
-      # user's own password, e.g. "Clips,Short Films".
       PRIVATE_FEEDS: ${PRIVATE_FEEDS:-}
       # Optional: hours private feeds stay visible after revealing (default 12).
       PRIVATE_UNLOCK_HOURS: ${PRIVATE_UNLOCK_HOURS:-}
-      # Legacy: feeds named here are treated as private (passwords unused).
       FEED_PASSWORDS: ${FEED_PASSWORDS:-}
     # A local .env file is also loaded if present, but it is optional so
     # deployments without one (e.g. from Git in Dockhand) still work.
@@ -38,9 +36,8 @@ services:
     volumes:
       # Persistent SQLite database (users, favorites, settings).
       - videoloop-data:/data
-      # Each SMB share is mounted into its own subfolder of /media. Every
-      # top-level folder under /media becomes a feed (or pick folders with
-      # FEEDS, e.g. "Short Videos:secondary/Short Videos").
+      # Each SMB share is mounted into its own subfolder of /media. Admins
+      # choose which folders become feeds in the app.
       - smb_main:/media/main:ro
       - smb_secondary:/media/secondary:ro
       # To add a third share, uncomment this line plus its block further down.

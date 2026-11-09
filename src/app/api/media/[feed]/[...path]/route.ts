@@ -32,7 +32,7 @@ export async function GET(
   }
 
   const feed = decodeURIComponent(params.feed);
-  if (!canViewFeed(session, feed)) {
+  if (!(await canViewFeed(session, feed))) {
     return new Response("Not found", { status: 403 });
   }
 

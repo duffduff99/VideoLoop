@@ -5,8 +5,8 @@ SMB/NAS shares. Swipe through endless, shuffled feeds from any phone or
 desktop browser, and install it to your home screen like an app.
 
 - **Swipe feed**: full-screen and snap-to-item. Shuffled, loops forever, loads lazily.
-- **Feeds** come from folders on one or more SMB shares. You can pick
-  exactly which folders appear with `FEEDS`.
+- **Feeds** come from folders on one or more SMB shares. Admins pick the
+  folders in the app, with no redeploy needed.
 - **Accounts**: username/password with "Remember me". Admins add and remove users in the app.
 - **Favorites** (no comments) in a thumbnail gallery. Video **scrubbing** and hold-to-fast-forward/rewind. Per-user **auto-play next** setting. Optional **private feeds**, hidden until you re-enter your password.
 - **Installable PWA**, with mobile-first touch controls and desktop keyboard controls.
@@ -74,7 +74,7 @@ Open `.env` and set at least these:
 
 Tips for `.env` files:
 - No quotes and no trailing spaces: `ADMIN_PASSWORD=changeme`, not `ADMIN_PASSWORD="changeme" `.
-- Values can contain spaces: `FEEDS=Short Films:main/ShortFilms` is fine.
+- Values can contain spaces: `SMB_SHARE=My Media` is fine.
 - If a password contains `$`, write it as `$$` (Compose treats `$` as a variable).
 
 ---
@@ -164,38 +164,34 @@ You don't need the `SMB_*` values in `.env` with this option.
 
 ## 5. Choose your feeds
 
-**Default:** every folder directly under `/media` becomes a feed, and
-everything inside it (including subfolders) plays in that feed. With the
-compose file above, that gives you one feed per share (e.g. `main`).
+Feeds are managed **in the app**, so there's nothing to redeploy when you add
+a folder to a share. Sign in as an admin and go to
+**Settings → Manage feeds**:
 
-**Pick exact folders:** set `FEEDS` in `.env`. Each entry is
-`Display Name:path`, separated by commas, and the path is relative to `/media`:
+- **Add a folder:** browse the mounted shares, tap a folder name to look
+  inside it, and tap **Add** next to the folder you want. Each feed plays
+  everything in its folder, including subfolders. "Add all" adds every folder
+  at the current level in one go.
+- **Rename, make private or remove:** tap a feed under "Your feeds". Renaming
+  keeps everyone's favorites. Removing a feed never touches the files.
 
-```sh
-FEEDS=Short Films:main/ShortFilms,Funny Clips:main/Funny,Short Videos:secondary/Short Videos
-```
+New files inside an existing feed show up on their own within about a minute.
 
-Only those folders appear, under those names. Everything else (for example
-a `Movies` folder full of `.mkv` files) is ignored.
+**First start:** to give you something to look at, every folder directly
+under `/media` is added as a feed (one per share, e.g. `main`). Remove those
+and add the folders you actually want.
 
-**Private feeds:** list feeds by display name in `PRIVATE_FEEDS`:
+**Private feeds** don't appear anywhere (home screen, favorites, or direct
+links) until a user goes to **Settings → Private feeds → Show** and re-enters
+**their own account password**. They then stay visible for 12 hours (change
+this with `PRIVATE_UNLOCK_HOURS`), until the user taps **Hide** (in Settings
+or the "Hide private" chip on the home screen), or until they sign out. This
+is per device and per user.
 
-```sh
-FEEDS=Images:main/Images,Clips:main/Clips
-PRIVATE_FEEDS=Clips
-```
-
-Private feeds don't appear anywhere (home screen, favorites, or direct links)
-until a user goes to **Settings → Private feeds → Show** and re-enters **their
-own account password**. They then stay visible for 12 hours (change this with
-`PRIVATE_UNLOCK_HOURS`), until the user taps **Hide** (in Settings or the
-"Hide private" chip on the home screen), or until they sign out. This is per
-device and per user.
-
-> Upgrading from feed passwords? Feeds named in the old `FEED_PASSWORDS` or
-> `FEED_PASSWORD_<NAME>` settings are automatically treated as private (the
-> old passwords are no longer used), so nothing becomes public by accident.
-> Switch to `PRIVATE_FEEDS` when convenient.
+> Upgrading from a version that used `FEEDS` / `PRIVATE_FEEDS`? Just redeploy.
+> On the first start the feeds from those settings are copied into the app
+> (private ones stay private). After that the variables are ignored and you
+> can delete them.
 
 ---
 
@@ -312,16 +308,14 @@ the manager's environment-variables section instead.
    | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / something strong |
    | `SMB_HOST` / `SMB_SHARE` / `SMB_USER` / `SMB_PASSWORD` | `192.168.1.10` / `media` / ... |
    | `HOST_PORT` *(optional)* | `8080` if 3000 is taken (default `3000`) |
-   | `FEEDS` *(optional)* | `Short Films:main/ShortFilms` |
-   | `PRIVATE_FEEDS` *(optional)* | `Short Films` |
 
 3. Deploy. The first deploy **builds** the image on the server, which takes a
    few minutes. Then check the stack's logs for the
    [healthy start lines](#6-first-start).
 
 Notes:
-- **Private feeds:** set `PRIVATE_FEEDS` in the stack's variables. It's
-  passed through by `docker-compose.yml`, so no `.env` file is needed.
+- **Feeds** are chosen in the app (**Settings → Manage feeds**), not in the
+  stack's variables. See [section 5](#5-choose-your-feeds).
 - **SMB mount errors** are easiest to read from a terminal on the server
   (`docker compose up` in the stack folder). If the CIFS volume fights you,
   switch to the [host mount](#option-b-mount-on-the-host-recommended-for-docker-desktop-nas-and-dockhand).
@@ -385,7 +379,7 @@ docker compose logs --tail=100 videoloop
 | **"Invalid username or password"** with the `.env` credentials | The admin is only created when the database is empty. Check `docker compose logs videoloop \| grep seed`. If it says "Users already exist", use `ADMIN_RESET_PASSWORD=true` ([section 10](#10-updating-backups-resetting)). Usernames are case-sensitive. |
 | Sign-in works on the server but **the phone keeps returning to the login page** | Make sure you're on the latest code (older builds set an HTTPS-only cookie). If you're behind HTTPS, check that the proxy sends `X-Forwarded-Proto`, or set `COOKIE_SECURE=true`. |
 | Favorites fail / you're bounced to login | Your browser has a login cookie from before a database reset. Sign out and back in. |
-| Home screen shows odd feeds like `cdrom`, `floppy`, `usb` | Those are empty folders built into the Alpine base image. Fixed in the current image, so rebuild/redeploy. `FEEDS` also hides them ([section 5](#5-choose-your-feeds)). |
+| Home screen shows odd feeds like `cdrom`, `floppy`, `usb` | Those are empty folders built into the Alpine base image. Fixed in the current image, so rebuild/redeploy. You can also remove any feed in **Settings → Manage feeds**. |
 | A feed opens but shows **nothing** | No supported files in it. Run the `find /media ...` command from [step 6](#6-first-start) and check the extensions. iPhone `.heic` photos and `.mkv`/`.avi` videos are skipped. |
 | A video sometimes sits at 0:00 or freezes | The player now shows a spinner while buffering and automatically reloads a video that makes no progress for ~4 seconds. If one particular file keeps doing it, it's probably an MP4 with its index at the end, which forces extra round-trips to the share. Fix it without re-encoding: `ffmpeg -i in.mp4 -c copy -movflags +faststart out.mp4` |
 | Video shows black or won't play | The codec isn't browser-friendly (for example HEVC/H.265 in some browsers). Re-encode to H.264 MP4: `ffmpeg -i in.mov -c:v libx264 -c:a aac -movflags +faststart out.mp4` |
@@ -404,8 +398,7 @@ docker compose logs --tail=100 videoloop
 | `HOST_PORT` | `3000` | Port on the host to reach the app at. |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | First admin account (created on first start). |
 | `ADMIN_RESET_PASSWORD` | *(unset)* | `true` resets the admin password on start. Remove it after use. |
-| `FEEDS` | *(auto)* | `Name:path,Name:path` list of feeds, with paths relative to `/media`. |
-| `PRIVATE_FEEDS` | *(unset)* | Comma-separated feed names hidden until revealed in Settings (see [section 5](#5-choose-your-feeds)). |
+| `FEEDS` / `PRIVATE_FEEDS` | *(unset)* | Legacy. Read once, on the first start after upgrading, to import existing feeds. Feeds are now managed in the app ([section 5](#5-choose-your-feeds)). |
 | `PRIVATE_UNLOCK_HOURS` | `12` | How long private feeds stay visible after revealing. |
 | `MEDIA_ROOT` | `/media` | Where media is read from inside the container. |
 | `DATABASE_URL` | `file:/data/videoloop.db` | SQLite database location. |

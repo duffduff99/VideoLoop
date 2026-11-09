@@ -35,13 +35,14 @@ export async function GET(
   const feed = decodeURIComponent(params.feed);
 
   // Private feeds are invisible until revealed in Settings.
-  if (!canViewFeed(session, feed)) {
+  if (!(await canViewFeed(session, feed))) {
     return NextResponse.json({ error: "Not found" }, { status: 403 });
   }
 
   const cursor = parseInt(req.nextUrl.searchParams.get("cursor") || "0", 10);
   const seedParam = req.nextUrl.searchParams.get("seed");
-  const all = await listFeedItems(feed);
+  // Copy: the listing is cached and shared, and the shuffle is in-place.
+  const all = [...(await listFeedItems(feed))];
 
   // Randomize playback order. The client passes a stable seed per cycle so
   // pagination stays consistent across pages within that cycle, and a fresh

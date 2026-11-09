@@ -23,7 +23,7 @@ export async function GET() {
   const playable = (
     await Promise.all(
       favs.map(async (f) => {
-        if (!canViewFeed(session, f.feed)) return null;
+        if (!(await canViewFeed(session, f.feed))) return null;
         const abs = await resolveMediaPath(f.feed, f.path);
         if (!abs) return null;
         const exists = await fs

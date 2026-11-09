@@ -232,27 +232,6 @@ code {
 }
 
 /* ---------- Home ---------- */
-.fav-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.1rem;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--accent);
-  font-weight: 600;
-  transition: transform 0.1s;
-}
-
-.fav-banner span:not(.chev) {
-  color: var(--text);
-}
-
-.fav-banner:active {
-  transform: scale(0.99);
-}
-
 .feed-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -283,7 +262,7 @@ code {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.55), transparent 55%);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent 55%);
 }
 
 .feed-card:active {
@@ -296,35 +275,41 @@ code {
   }
 }
 
-.feed-card-name {
+.feed-card-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.feed-card-cover.ready {
+  opacity: 1;
+}
+
+.feed-card-text {
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.feed-card-name {
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.2;
   word-break: break-word;
 }
 
-.feed-card-play {
-  position: absolute;
-  top: 0.75rem;
-  left: 0.75rem;
-  z-index: 1;
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.feed-card-lock {
-  position: absolute;
-  top: 0.85rem;
-  right: 0.85rem;
-  z-index: 1;
-  opacity: 0.9;
+.feed-card-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .feed-card.skeleton {
@@ -609,6 +594,11 @@ code {
   position: fixed;
   inset: 0;
   background: #000;
+  /* Long-press is used for hold-to-seek and scrubbing: never start a text
+     selection or open the iOS callout menu anywhere in the viewer. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .viewer {
@@ -961,15 +951,15 @@ code {
 
 .feed-card-tag {
   position: absolute;
-  top: 0.85rem;
-  right: 0.75rem;
+  top: 0.7rem;
+  right: 0.7rem;
   z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
   padding: 0.2rem 0.5rem;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.5);
   font-size: 0.7rem;
   font-weight: 700;
 }
@@ -1023,4 +1013,103 @@ code {
   to {
     opacity: 1;
   }
+}
+
+/* ---------- Manage feeds ---------- */
+.row-main {
+  min-width: 0;
+}
+
+.row-main .row-sub,
+.sheet-sub {
+  overflow-wrap: anywhere;
+}
+
+.row-sub.warn {
+  color: #ffb454;
+}
+
+.mini-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.crumbs button {
+  padding: 0.2rem 0.1rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.crumbs button:disabled {
+  color: var(--text);
+  cursor: default;
+}
+
+.crumb-sep {
+  margin: 0 0.35rem;
+  color: var(--muted);
+}
+
+.folder-row {
+  padding: 0.5rem 0.8rem 0.5rem 0;
+}
+
+.folder-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0 0.55rem 1.1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.folder-open svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.folder-open span {
+  overflow-wrap: anywhere;
+}
+
+.text-btn {
+  display: block;
+  width: 100%;
+  padding: 0.6rem;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.text-btn.danger {
+  color: #ff6b6b;
+}
+
+.text-btn:disabled {
+  opacity: 0.5;
+}
+
+.sheet-row {
+  padding: 0.25rem 0;
 }

@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { isFeedPrivate, listFeeds, privateUnlockMs, privateVisible } from "@/lib/feeds";
+import { listFeeds, privateUnlockMs, privateVisible } from "@/lib/feeds";
 import { createToken, getSession, SessionPayload, setSessionCookie } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 async function hasPrivateFeeds(): Promise<boolean> {
-  return (await listFeeds()).some((f) => isFeedPrivate(f.name));
+  return (await listFeeds()).some((f) => f.private);
 }
 
 function status(session: SessionPayload, hasPrivate: boolean) {

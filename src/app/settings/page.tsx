@@ -167,6 +167,13 @@ export default function SettingsPage() {
 
           {isAdmin && (
             <div className="group">
+              <Link href="/admin/feeds" className="row link">
+                <div>
+                  <div className="row-title">Manage feeds</div>
+                  <div className="row-sub">Choose which folders appear as feeds</div>
+                </div>
+                <span className="chev">›</span>
+              </Link>
               <Link href="/admin/users" className="row link">
                 <div>
                   <div className="row-title">Manage users</div>

@@ -506,7 +506,10 @@ export default function FeedViewer({
     autoplaySetting && activeItem?.type === "image" && !paused;
 
   return (
-    <div className="viewer-shell">
+    // Long-press must never open the browser's context menu anywhere in the
+    // viewer (video, scrub bar, buttons, captions): it steals the touch from
+    // hold-to-seek and scrubbing.
+    <div className="viewer-shell" onContextMenu={(e) => e.preventDefault()}>
       <div className="viewer-topbar">
         <button className="icon-btn" onClick={goBack} aria-label="Back">
           <BackIcon />
@@ -538,7 +541,6 @@ export default function FeedViewer({
                   onPointerUp={() => onMediaPointerUp(idx)}
                   onPointerCancel={onMediaPointerCancel}
                   onPointerLeave={() => holdFired.current && stopHold()}
-                  onContextMenu={(e) => e.preventDefault()}
                 >
                   {item.type === "video" ? (
                     <SlideVideo
@@ -741,6 +743,9 @@ function SlideVideo({
       <video
         ref={ref}
         playsInline
+        disablePictureInPicture
+        disableRemotePlayback
+        controlsList="nodownload noplaybackrate noremoteplayback"
         loop={loop}
         muted={muted}
         preload={preload}
